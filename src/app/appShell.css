@@ -1,0 +1,12 @@
+/* 文件：appShell.css
+ * 模块：应用壳层
+ * 作用：样式入口（壳层统一导入 UI + 各视图样式）
+ * 依赖：base.css
+ * @created 2025-12-28
+ * @modified 2026-01-01
+ */
+
+@import "../styles/ui.css";
+@import "../modules/shell/shell.css";
+@import "../modules/chat/chatView.css";
+@import "../modules/settings/settingsView.css";

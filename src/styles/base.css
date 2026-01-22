@@ -1,0 +1,57 @@
+/* 文件：base.css
+ * 模块：全局样式
+ * 作用：基础配色与布局
+ * 依赖：无
+ * @created 2025-12-28
+ * @modified 2025-12-28
+ */
+
+:root {
+  /* VS Code Light+ 风格（简化版） */
+  color-scheme: light;
+
+  --bg: #f3f3f3;
+  --panel: #ffffff;
+  --panel2: #f8f8f8;
+  --activity: #ececec;
+  --line: #d0d0d0;
+  --text: #1f1f1f;
+  --muted: #5f6368;
+  --danger: #c42b1c;
+  --primary: #007acc;
+  --shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  --radius: 8px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--bg);
+}
+
+::selection {
+  background: rgba(0, 122, 204, 0.22);
+  color: var(--text);
+}
+
+button {
+  font-family: inherit;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}

@@ -1,0 +1,989 @@
+/* 文件：vcardPage.css
+ * 模块：角色卡设计器
+ * 作用：Vibe Coding 工作台布局与样式（三栏布局重构版）
+ * 依赖：无
+ * @created 2025-12-29
+ * @modified 2026-01-20
+ */
+
+/* ========== 全局变量覆盖（White Theme PRO） ========== */
+:root {
+  --vcard-bg: #ffffff;
+  --vcard-panel: #f8f9fa;
+  --vcard-panel2: #ffffff;
+  --vcard-line: #e5e7eb;
+  --vcard-text: #1f2937;
+  --vcard-muted: #6b7280;
+  --vcard-accent: #0969da;
+  --vcard-accent-hover: #0550ae;
+  --vcard-danger: #cf222e;
+  --vcard-success: #1a7f37;
+  --vcard-radius: 6px;
+  --vcard-tab-active-border: var(--vcard-accent);
+}
+
+
+/* ========== 主容器 ========== */
+.vcardPage {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--vcard-bg);
+  color: var(--vcard-text);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* ========== 主体三栏布局 ========== */
+.vcardPage__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px 1fr 350px;
+  overflow: hidden;
+}
+
+/* ========== 侧边栏通用 ========== */
+.vcardSidebar {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+  background: var(--vcard-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vcardSidebar--left {
+  border-right: 1px solid var(--vcard-line);
+}
+
+.vcardSidebar--right {
+  border-left: 1px solid var(--vcard-line);
+  padding: 0;
+  gap: 0;
+}
+
+/* ========== 中间工作台 ========== */
+.vcardWorkbench {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--vcard-panel2);
+  display: flex;
+  flex-direction: column;
+}
+
+.vcardWorkbench__tabs {
+  display: flex;
+  gap: 0;
+  background: var(--vcard-panel);
+  border-bottom: 1px solid var(--vcard-line);
+  padding: 0 12px;
+}
+
+.vcardWorkbench__content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+/* ========== 右侧栏 ========== */
+.vcardRightTabs {
+  display: flex;
+  gap: 0;
+  background: var(--vcard-panel);
+  border-bottom: 1px solid var(--vcard-line);
+  padding: 0 8px;
+}
+
+.vcardRightContent {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.vcardRightPane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.vcardRightPane .chatView {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ========== Chat Header（VCard 专用） ========== */
+.vcardChatHeader {
+  justify-content: space-between;
+}
+
+.vcardChatView .chatView__body {
+  gap: 8px;
+}
+
+.vcardChatView .chatList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.vcardChatView .composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vcardChatView .composer__input {
+  resize: none;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.vcardChatView .composer__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vcardChatView .chatMsg__metaRight {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.vcardChatView .chatMsg__status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--vcard-line);
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--vcard-muted);
+}
+
+.vcardChatView .chatMsg__status.is-sending {
+  border-color: rgba(9, 105, 218, 0.35);
+  background: rgba(9, 105, 218, 0.12);
+  color: var(--vcard-accent);
+}
+
+.vcardChatView .chatMsg__status.is-failed {
+  border-color: rgba(207, 34, 46, 0.35);
+  background: rgba(207, 34, 46, 0.1);
+  color: var(--vcard-danger);
+}
+
+.vcardChatView .chatMsg__error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--vcard-danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.vcardChatView .chatMsg__retryRow {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.vcardChatView .chatMsg__retryBtn {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.vcardChatView .composer__toolbarSpacer {
+  flex: 1;
+}
+
+.vcardChatView .vcardChatMenu {
+  position: relative;
+}
+
+.vcardChatView .vcardChatMenu>summary {
+  list-style: none;
+}
+
+.vcardChatView .vcardChatMenu>summary::-webkit-details-marker {
+  display: none;
+}
+
+.vcardChatView .vcardChatMenu__trigger {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--vcard-line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--vcard-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.vcardChatView .vcardChatMenu[open] .vcardChatMenu__trigger {
+  border-color: var(--vcard-accent);
+  color: var(--vcard-accent);
+}
+
+.vcardChatView .vcardChatMenu__panel {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  min-width: 160px;
+  padding: 6px;
+  border: 1px solid var(--vcard-line);
+  border-radius: 10px;
+  background: var(--vcard-panel2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+}
+
+.vcardChatView .vcardChatMenu__item {
+  border: none;
+  background: transparent;
+  color: var(--vcard-text);
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vcardChatView .vcardChatMenu__item:hover {
+  background: rgba(0, 122, 204, 0.12);
+}
+
+.vcardChatView .vcardChatMenu__item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ========== Issues 面板 ========== */
+.vcardIssuesPane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--vcard-panel2);
+}
+
+.vcardIssuesPane__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--vcard-panel);
+  border-bottom: 1px solid var(--vcard-line);
+}
+
+.vcardIssuesPane__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vcardIssuesPane__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+/* ========== Task Panel (moved from left sidebar) ========== */
+.vcardTaskPanel {
+  padding: 10px;
+  border-bottom: 1px solid var(--vcard-line);
+  background: var(--vcard-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+
+/* ========== Tabs 样式 ========== */
+.vcardTab {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--vcard-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.vcardTab:hover {
+  color: var(--vcard-text);
+}
+
+.vcardTab--active {
+  color: var(--vcard-text);
+  border-bottom-color: var(--vcard-tab-active-border);
+}
+
+/* ========== 工具箱子 Tab ========== */
+.vcardToolsPane {
+  display: flex;
+  flex-direction: column;
+}
+
+.vcardToolsTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--vcard-panel2);
+  border-bottom: 1px solid var(--vcard-line);
+}
+
+.vcardSubTab {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--vcard-radius);
+  color: var(--vcard-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vcardSubTab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--vcard-line);
+}
+
+.vcardSubTab--active {
+  background: rgba(0, 122, 204, 0.15);
+  border-color: var(--vcard-accent);
+  color: var(--vcard-text);
+}
+
+.vcardToolsContent {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+/* ========== 预览面板 ========== */
+.vcardPreviewPane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ========== Vibe Chat（嵌入预览：限制高度，避免消息过多撑高整体） ========== */
+.vcardPreviewPane .chatView {
+  height: auto;
+  max-height: clamp(320px, 55vh, 720px);
+}
+
+/* ========== Statusbar ========== */
+.vcardStatusbar {
+  flex-shrink: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  background: var(--vcard-panel);
+  border-top: 1px solid var(--vcard-line);
+  color: var(--vcard-muted);
+  font-size: 11px;
+}
+
+.vcardStatusbar__group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.vcardStatusbar__group--right {
+  justify-content: flex-end;
+}
+
+.vcardStatusbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: default;
+}
+
+.vcardStatusbar__item .k {
+  color: var(--vcard-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+.vcardStatusbar__item .v {
+  color: var(--vcard-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+.vcardStatusbar__item--pending .v {
+  color: var(--vcard-accent);
+}
+
+.vcardStatusbar__item--link {
+  cursor: pointer;
+}
+
+.vcardStatusbar__item--link:hover .v {
+  color: var(--vcard-accent);
+}
+
+.vcardStatusbar__item--link.is-alert .v {
+  color: var(--vcard-danger);
+}
+
+/* ========== 文件内容查看器 ========== */
+.vcardFileViewer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid var(--vcard-line);
+  border-radius: var(--vcard-radius);
+  background: var(--vcard-panel);
+}
+
+.vcardFileViewer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.vcardFileViewer__headLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.vcardFileViewer__title {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.vcardFileViewer__path {
+  color: var(--vcard-muted);
+  font-size: 11px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+.vcardFileViewer__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vcardFileViewer__actions .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.vcardFileViewer__empty {
+  color: var(--vcard-muted);
+  font-size: 12px;
+}
+
+.vcardFileViewer__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.vcardFileViewer__content {
+  margin: 0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: var(--vcard-radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vcardFileViewer__error {
+  margin-top: 8px;
+  color: var(--vcard-danger);
+  font-size: 12px;
+}
+
+/* ========== Hints / 任务 / 其他组件 ========== */
+.vcardHint {
+  padding: 10px;
+  border: 1px solid var(--vcard-line);
+  border-radius: var(--vcard-radius);
+  background: var(--vcard-panel);
+}
+
+.vcardHint__title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.vcardHint__error {
+  color: var(--vcard-danger);
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.vcardHint__row {
+  color: var(--vcard-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ========== 文件资源管理器 ========== */
+.vcardExplorer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border: 1px solid var(--vcard-line);
+  border-radius: var(--vcard-radius);
+  background: var(--vcard-panel);
+}
+
+.vcardExplorer.is-dragover {
+  border-color: var(--vcard-accent);
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+}
+
+.vcardExplorer__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(9, 105, 218, 0.08);
+  border: 1px dashed rgba(9, 105, 218, 0.7);
+  border-radius: var(--vcard-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.vcardExplorer__overlayText {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--vcard-accent);
+  text-align: center;
+}
+
+.vcardExplorer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vcardExplorer__title {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardExplorer__empty {
+  color: var(--vcard-muted);
+  font-size: 12px;
+}
+
+.vcardExplorer__list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vcardExplorerMenu {
+  position: relative;
+}
+
+.vcardExplorerMenu>summary {
+  list-style: none;
+}
+
+.vcardExplorerMenu>summary::-webkit-details-marker {
+  display: none;
+}
+
+.vcardExplorerMenu__trigger {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--vcard-line);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--vcard-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.vcardExplorerMenu[open] .vcardExplorerMenu__trigger {
+  border-color: var(--vcard-accent);
+  color: var(--vcard-accent);
+}
+
+.vcardExplorerMenu__panel {
+  position: absolute;
+  right: 0;
+  top: 28px;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--vcard-line);
+  border-radius: 10px;
+  background: var(--vcard-panel2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+}
+
+.vcardExplorerMenu__item {
+  border: none;
+  background: transparent;
+  color: var(--vcard-text);
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vcardExplorerMenu__item:hover {
+  background: rgba(0, 122, 204, 0.12);
+}
+
+.vcardExplorerMenu__item--danger {
+  color: var(--vcard-danger);
+}
+
+.vcardExplorerMenu__divider {
+  height: 1px;
+  background: var(--vcard-line);
+  margin: 4px 0;
+}
+
+.vcardExplorerMenu__dangerTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vcard-danger);
+  padding: 2px 6px 0;
+}
+
+.vcardExplorer__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vcardExplorer__toggle {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--vcard-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.1s ease;
+}
+
+.vcardExplorer__toggle:hover {
+  color: var(--vcard-text);
+}
+
+.vcardExplorer__toggle--spacer {
+  cursor: default;
+}
+
+.vcardExplorer__item {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--vcard-radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--vcard-text);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.1s ease;
+}
+
+.vcardExplorer__item:hover {
+  border-color: rgba(0, 122, 204, 0.3);
+  background: rgba(0, 122, 204, 0.08);
+}
+
+.vcardExplorer__item.is-selected {
+  border-color: rgba(0, 122, 204, 0.6);
+  background: rgba(0, 122, 204, 0.16);
+}
+
+.vcardExplorer__item.is-active {
+  border-color: rgba(78, 201, 176, 0.6);
+  background: rgba(78, 201, 176, 0.12);
+}
+
+.vcardExplorer__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* ========== 任务显示 ========== */
+.vcardTask__criteriaTitle {
+  margin-top: 10px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardTask__criteria {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--vcard-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ========== Stepper ========== */
+.vcardStepper {
+  padding: 10px;
+  border: 1px solid var(--vcard-line);
+  border-radius: var(--vcard-radius);
+  background: var(--vcard-panel);
+}
+
+.vcardStepper__title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.vcardStepper__list {
+  max-height: clamp(140px, 22vh, 260px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.vcardStep {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--vcard-radius);
+}
+
+.vcardStep__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--vcard-muted);
+}
+
+.vcardStep.done .vcardStep__dot {
+  background: var(--vcard-success);
+}
+
+.vcardStep.blocked .vcardStep__dot {
+  background: var(--vcard-danger);
+}
+
+.vcardStep__name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vcardStep__hint {
+  font-size: 11px;
+  color: var(--vcard-muted);
+  margin-top: 2px;
+}
+
+.vcardStep__status {
+  font-size: 11px;
+  color: var(--vcard-muted);
+}
+
+/* ========== 编辑器折叠块 ========== */
+.vcardEditor {
+  padding: 10px;
+  border: 1px solid var(--vcard-line);
+  border-radius: var(--vcard-radius);
+  background: var(--vcard-panel);
+}
+
+.vcardEditor__summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardEditor__empty {
+  margin-top: 8px;
+  color: var(--vcard-muted);
+  font-size: 12px;
+}
+
+/* ========== 预览区块 ========== */
+.vcardPreview {
+  padding: 12px;
+  border: 1px solid var(--vcard-line);
+  border-radius: var(--vcard-radius);
+  background: var(--vcard-panel);
+}
+
+.vcardPreview__title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.vcardBlock {
+  border: 1px solid var(--vcard-line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: var(--vcard-panel);
+}
+
+.vcardBlock__title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.vcardText .k {
+  color: var(--vcard-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  color: var(--vcard-text);
+}
+
+/* ========== 世界书 Diff ========== */
+.vcardWbDiff {
+  margin-top: 10px;
+  border: 1px solid var(--vcard-line);
+  border-radius: 8px;
+  background: var(--vcard-panel);
+  padding: 8px;
+}
+
+.vcardWbDiff__summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardWbDiff__item {
+  margin-top: 10px;
+  border-top: 1px dashed var(--vcard-line);
+  padding-top: 10px;
+}
+
+.vcardWbDiff__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.vcardWbDiff__title {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardWbDiff__fields {
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--vcard-muted);
+}
+
+.vcardWbDiff__label {
+  margin: 10px 0 6px;
+  color: var(--vcard-muted);
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.vcardWbDiff__code {
+  max-height: 200px;
+  overflow: auto;
+  word-break: break-word;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: var(--vcard-radius);
+}

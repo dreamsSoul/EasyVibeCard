@@ -1,0 +1,135 @@
+/* 文件：chatView.css
+ * 模块：聊天
+ * 作用：聊天视图样式（消息列表 + 输入框）
+ * 依赖：ui.css、base.css 变量
+ * @created 2025-12-28
+ * @modified 2026-01-02
+ */
+
+.chatView {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chatView__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.chatView__title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.chatView__meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  overflow: auto;
+}
+
+.chatView__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.chatView__body {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatList {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.02);
+  padding: 12px;
+}
+
+.chatList__empty {
+  padding: 14px 6px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.chatMsg {
+  padding: 10px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.chatMsg.user {
+  border-color: rgba(0, 122, 204, 0.35);
+  background: rgba(0, 122, 204, 0.12);
+}
+
+.chatMsg.assistant {
+  border-color: rgba(78, 201, 176, 0.35);
+  background: rgba(78, 201, 176, 0.1);
+}
+
+.chatMsg__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.chatMsg__role {
+  font-family: var(--mono);
+}
+
+.chatMsg__content {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.composer {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.composer__input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px;
+  outline: none;
+  resize: vertical;
+}
+
+.composer__input:focus {
+  border-color: rgba(0, 122, 204, 0.7);
+  box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.18);
+}
+
+.composer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}

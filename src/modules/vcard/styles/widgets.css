@@ -1,0 +1,348 @@
+/* 文件：vcardWidgets.css
+ * 模块：角色卡设计器
+ * 作用：VCard 工作台内的组件样式（条目/替换预览/世界书预览等）
+ * 依赖：vcardPage.css（基础布局与通用容器）
+ * @created 2025-12-31
+ * @modified 2026-01-05
+ */
+
+/* ========== 条目通用 ========== */
+.vcardEntry {
+  margin-top: 10px;
+  border: 1px solid var(--vcard-line, #e5e7eb);
+  border-radius: 8px;
+  background: var(--vcard-panel, #f8f9fa);
+  padding: 10px;
+}
+
+.vcardEntry__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.vcardEntry__title {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardEntry__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.vcardEntry__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vcardEntry__row .k {
+  color: var(--vcard-muted, #858585);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+/* ========== 替换预览 ========== */
+.vcardReplace__field {
+  margin-top: 10px;
+}
+
+.vcardReplace__fieldTitle {
+  font-weight: 700;
+  font-size: 12px;
+  margin: 10px 0 8px;
+}
+
+.vcardReplace__diff {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vcardReplace__sample {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vcardReplace__line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  color: var(--vcard-text, #cccccc);
+}
+
+.vcardReplace__arrow {
+  color: var(--vcard-muted, #858585);
+}
+
+.vcardReplace__mark {
+  border: 1px solid var(--vcard-line, #3e3e42);
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.vcardReplace__mark--del {
+  border-color: rgba(241, 76, 76, 0.5);
+  background: rgba(241, 76, 76, 0.12);
+}
+
+.vcardReplace__mark--add {
+  border-color: rgba(63, 185, 80, 0.5);
+  background: rgba(63, 185, 80, 0.12);
+}
+
+/* ========== 世界书预览 ========== */
+.vcardWbPrev__meta {
+  margin-left: 8px;
+  color: var(--vcard-muted, #858585);
+  font-size: 12px;
+}
+
+.vcardWbPrev__item {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--vcard-line, #e5e7eb);
+  border-radius: 8px;
+  background: var(--vcard-panel, #f8f9fa);
+}
+
+.vcardWbPrev__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.vcardWbPrev__badge {
+  border: 1px solid var(--vcard-line, #3e3e42);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--vcard-muted, #858585);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.vcardWbPrev__badge--blue {
+  border-color: rgba(0, 122, 204, 0.5);
+  background: rgba(0, 122, 204, 0.14);
+  color: rgba(148, 205, 255, 0.95);
+}
+
+.vcardWbPrev__badge--green {
+  border-color: rgba(63, 185, 80, 0.5);
+  background: rgba(63, 185, 80, 0.14);
+  color: rgba(128, 255, 175, 0.95);
+}
+
+.vcardWbPrev__badge--on {
+  border-color: rgba(63, 185, 80, 0.4);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.vcardWbPrev__badge--off {
+  opacity: 0.55;
+}
+
+.vcardWbPrev__title {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardWbPrev__order {
+  color: var(--vcard-muted, #858585);
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.vcardWbPrev__keys {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 6px;
+  align-items: start;
+}
+
+.vcardWbPrev__k {
+  color: var(--vcard-muted, #858585);
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.vcardWbPrev__v {
+  font-size: 12px;
+  color: var(--vcard-text, #cccccc);
+  font-family: "JetBrains Mono", monospace;
+  word-break: break-word;
+}
+
+.vcardWbPrev__content {
+  margin-top: 8px;
+}
+
+/* ========== 运行日志 ========== */
+.vcardLog {
+  padding: 10px;
+  border: 1px solid var(--vcard-line, #e5e7eb);
+  border-radius: 6px;
+  background: var(--vcard-panel, #f8f9fa);
+}
+
+.vcardLog__toolbar {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.vcardLog__empty {
+  margin-top: 10px;
+  color: var(--vcard-muted, #858585);
+  font-size: 12px;
+}
+
+.vcardLogRow {
+  margin-top: 10px;
+  border: 1px solid var(--vcard-line, #e5e7eb);
+  border-radius: 8px;
+  background: var(--vcard-panel, #f8f9fa);
+  overflow: hidden;
+}
+
+.vcardLogRow__summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.vcardLogRow__badge {
+  border: 1px solid var(--vcard-line, #3e3e42);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--vcard-muted, #858585);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.vcardLogRow__badge.ok {
+  border-color: rgba(63, 185, 80, 0.5);
+  background: rgba(63, 185, 80, 0.12);
+  color: rgba(128, 255, 175, 0.95);
+}
+
+.vcardLogRow__badge.fail {
+  border-color: rgba(241, 76, 76, 0.5);
+  background: rgba(241, 76, 76, 0.12);
+  color: rgba(255, 160, 160, 0.95);
+}
+
+.vcardLogRow__badge.muted {
+  opacity: 0.6;
+}
+
+.vcardLogRow__mono {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--vcard-text, #cccccc);
+  opacity: 0.85;
+}
+
+.vcardLogRow__err {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--vcard-danger, #f14c4c);
+}
+
+.vcardLogRow__body {
+  padding: 10px;
+  border-top: 1px solid var(--vcard-line, #3e3e42);
+}
+
+.vcardLogRow__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.vcardLogRow__section {
+  margin-top: 10px;
+}
+
+.vcardLogRow__title {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--vcard-muted, #858585);
+  margin-bottom: 6px;
+}
+
+/* ========== 世界书 Diff (已在 vcardPage.css，此处兜底) ========== */
+.vcardWbDiff {
+  margin-top: 10px;
+  border: 1px solid var(--vcard-line, #e5e7eb);
+  border-radius: 8px;
+  background: var(--vcard-panel, #f8f9fa);
+  padding: 8px;
+}
+
+.vcardWbDiff__summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardWbDiff__item {
+  margin-top: 10px;
+  border-top: 1px dashed var(--vcard-line, #3e3e42);
+  padding-top: 10px;
+}
+
+.vcardWbDiff__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.vcardWbDiff__title {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.vcardWbDiff__fields {
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--vcard-muted, #858585);
+}
+
+.vcardWbDiff__label {
+  margin: 10px 0 6px;
+  color: var(--vcard-muted, #858585);
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.vcardWbDiff__code {
+  max-height: 180px;
+  overflow: auto;
+  word-break: break-word;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+}
