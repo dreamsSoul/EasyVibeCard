@@ -10,6 +10,11 @@
 import { VCARD_CTRL_PREFIX } from "./constants.js";
 import { isPlainObject, normalizeText } from "./normalize.js";
 
+function normalizeWorkflowMode(vcard) {
+  const mode = normalizeText(vcard?.workflow?.mode);
+  return mode === "free" ? "free" : "task";
+}
+
 function pickProgress(snapshot) {
   const p = snapshot?.meta?.progress;
   const obj = p && typeof p === "object" ? p : {};
@@ -98,9 +103,10 @@ function buildToolExamples({ root }) {
   ].join("\n");
 }
 
-export function buildVcardContextText(snapshot, mode) {
+export function buildVcardContextText(snapshot, mode, vcard) {
   const root = normalizeText(snapshot?.card?.name) || "角色名";
   const progress = pickProgress(snapshot);
+  const workflowMode = normalizeWorkflowMode(vcard);
 
   const worldbook = buildWorldbookPreview(snapshot);
   const regexScripts = buildPreview(snapshot?.regex_scripts, (s) => s?.name);
@@ -110,6 +116,7 @@ export function buildVcardContextText(snapshot, mode) {
 
   const payload = {
     progress: { stepIndex: progress.stepIndex, totalSteps: progress.totalSteps, stepName: progress.stepName },
+    workflow: { mode: workflowMode },
     fileTreePreview: {
       root,
       worldbook: { entries: worldbook.preview, more: worldbook.more },
@@ -118,7 +125,10 @@ export function buildVcardContextText(snapshot, mode) {
       rawMeta: { dataExtensionsKeys: rawKeys, vibePlanIncluded },
     },
     hint: {
-      note: "正文已通过“全文注入”提供；当你需要向用户提问/说明时，可直接输出纯文本（不需要 <tool_use>）。",
+      note:
+        workflowMode === "free"
+          ? "当前为自由编辑模式：请优先遵循最近的【USER_INPUT】完成用户需求；不要生成/修改 raw.dataExtensions.vibePlan。需要向用户提问/说明时，直接输出纯文本（不需要 <tool_use>）。"
+          : "正文已通过“全文注入”提供；当你需要向用户提问/说明时，可直接输出纯文本（不需要 <tool_use>）。",
     },
   };
 
@@ -132,14 +142,20 @@ function pickCtrlTitle(intent) {
   return `${VCARD_CTRL_PREFIX}执行`;
 }
 
-export function buildVcardControlText({ snapshot, mode, reason, intent }) {
+export function buildVcardControlText({ snapshot, mode, reason, intent, userText, vcard }) {
   const progress = pickProgress(snapshot);
-  const task = normalizeText(reason) || progress.nextActionText || "请根据草稿看板补齐本步缺失内容，并推进到下一步。";
+  const workflowMode = normalizeWorkflowMode(vcard);
+  const reasonText = normalizeText(reason);
+  const task =
+    workflowMode === "free"
+      ? reasonText || "请继续根据最近的【USER_INPUT】完成用户需求（自由编辑模式；不要生成/修改 raw.dataExtensions.vibePlan）。"
+      : reasonText || progress.nextActionText || "请根据草稿看板补齐本步缺失内容，并推进到下一步。";
 
   const lines = [
     pickCtrlTitle(intent),
     "",
     `当前：Step ${progress.stepIndex}/${progress.totalSteps} - ${progress.stepName}`,
+    `工作模式：${workflowMode === "free" ? "自由编辑（free）" : "任务模式（task）"}`,
     `任务：${task}`,
     "",
     "工具使用约定（简版；示例见【VCARD_CONTEXT】）：",
@@ -149,7 +165,17 @@ export function buildVcardControlText({ snapshot, mode, reason, intent }) {
     "4) patch：kind=*.patch 必须包含 patch[]；op 仅 set/remove；set 需要 path+value；remove 仅 path（且仅支持有限范围）。",
     "5) worldbook.target：请提供 worldbook（含 entries 全量），系统会自动生成 diff 并应用。",
     "6) raw 约束：仅允许修改 raw.dataExtensions.vibePlan（任务清单）；且不允许与其他字段的修改混合（需要拆成两次）。",
-    "7) 【USER_INPUT】标签：聊天历史中带有此标签的消息是用户的直接指令，必须优先响应。若用户指令与当前计划冲突，以用户指令为准。",
+    "7) 【VCARD：全文（自动注入）】...【/VCARD：全文（自动注入）】是系统提供的只读快照：不要在输出中复述/复制/粘贴这段全文（包括路径标记与 JSON 原文）；它仅用于理解现状与定位 path。",
+    "8) Patch 最小化：patch 只包含完成用户请求所需的最小改动；不要对“值不变”的字段重复 set。",
+    "9) 填空 vs 改写：若用户只要求补充/完善，请优先填写空字段或在末尾追加；除非用户明确要求改写/纠错，或存在明显冲突/错误/占位垃圾内容，否则不要无理由改写已写好的非空字段。",
+    ...(workflowMode === "free"
+      ? [
+          "10) 自由编辑模式：不要生成/修改 raw.dataExtensions.vibePlan（除非用户明确要求创建任务清单）。",
+          "11) 【USER_INPUT】标签：聊天历史中带有此标签的消息是用户的直接指令，必须优先响应。若用户指令与当前计划冲突，以用户指令为准。",
+        ]
+      : [
+          "10) 【USER_INPUT】标签：聊天历史中带有此标签的消息是用户的直接指令，必须优先响应。若用户指令与当前计划冲突，以用户指令为准。",
+        ]),
   ];
 
   return lines.join("\n").trim();

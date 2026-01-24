@@ -1,1063 +1,1193 @@
 
-  【VCard 角色卡：MVU 变量框架】
-  0) 优先级与输出硬约束（防冲突）
-  - 【VCARD_CTRL】永远是本轮唯一权威；若与本段冲突，以【VCARD_CTRL】为准。
-  - 本段内容用于“把 MVU 接入到角色卡产物（worldbook / tavern_helper / regex_scripts）”，不是让你在 VCard 回合里输出剧
-  情。你是在**编写**角色卡（Write），不是在**扮演**角色（Play）。
-  - 你在 VCard 的最终输出必须且只能是 1 个：<tool_use>...</tool_use>（块外不要解释/Markdown/额外文字）。
-  - 本教程里出现的 <UpdateVariable> / <JSONPatch> / <StatusPlaceHolderImpl/> 是“后续跑团/聊天时角色扮演模型的输出协议”，
-  你要把它们写进角色卡（世界书/正则/脚本），而不是作为本轮 VCard 的最终输出。
-  - 一次只需要更新一点东西即可，可分为多次进行
-  - 通常情况下变量设置都是一些关键变量，需要ai记住的，比如人物信息， 人物外貌等。不过记录设置变量的元版本这样对于角色卡角色扮演没有什么用处的可以不要写为关键变量
-  - D0,D1,D2这些值是指at_depth_system位置的at_depth为0，1，2的意思
-  - 请注意跑团/聊天时角色扮演模型的输出协议中更新变量的路径时根据 [initvar] 里设置的路径。例如，白娅:\n  好感度: 30，其好感度路径就是 /白娅/好感度。
-比如:
-  ```yaml
-  白娅:
-    好感度: 30
-    状态: 正常
-    着装:
-      上装: 校服外套
-      下装: 百褶裙
-  世界:
-    当前时间: 2025年1月1日 10:00
-    当前地点: 教室
-  主角:
-    物品栏:
-      创可贴:
-        描述: 旧的卡通创可贴
-        数量: 1
-  ```
-好感度路径就是  /白娅/好感度
-  -变量筛选原则：
+```markdown
+【VCard 角色卡：MVU 变量框架】
 
-保留：剧情驱动相关的变量（如：人物好感度、精神状态、身体部位状态、物品栏、金钱、时间、地点）。
-剔除：无用的元数据（如：config_version, author_id 等对角色扮演无用的记录）。
-一次一小步：不要试图一次性穷尽所有物理法则，只定义核心变量。
-路径一致性：
+═══════════════════════════════════════════════════════════════
+第一部分：VCard 输出硬约束（最高优先级）
+═══════════════════════════════════════════════════════════════
 
-Schema 定义: 白娅: z.object({ 好感度: ... })
-YAML (Initvar): 白娅:\n  好感度: 30
-Path (JSON Patch): /白娅/好感度
-宏: stat_data.白娅.好感度
+核心规则：
+- 【VCARD_CTRL】永远是本轮唯一权威；若与本文档冲突，以【VCARD_CTRL】为准
+- 你是在**编写**角色卡（Write），不是在**扮演**角色（Play）
+- 你的最终输出必须且只能是：<tool_use>...</tool_use>（块外禁止任何文字）
+- 一次只修改一个方面，可分多次进行
 
+角色区分（重要）：
+┌─────────────────┬────────────────────────────────────────────┐
+│ 你（VCard AI）   │ 修改角色卡文件，输出 <tool_use>             │
+├─────────────────┼────────────────────────────────────────────┤
+│ 跑团AI（运行时） │ 扮演角色并更新变量，输出 <UpdateVariable>   │
+└─────────────────┴────────────────────────────────────────────┘
+你要把 <UpdateVariable>/<JSONPatch>/<StatusPlaceHolderImpl/> 写进角色卡，
+供跑团AI使用，而不是作为你的输出。
 
-A) 输出协议（必须）
-2) <tool_use> 内：<name> 填 kind；<parameters> 填 JSON（必须可解析；可为单个对象或对象数组；数组用于一次输出多个 kind）。
-3) kind=*.patch：
-   - 必须包含 patch: []
-   - patch[i].op 仅允许 set/remove
-   - set 需要 path + value；remove 仅 path
-5) 不要输出完整 CardDraft；系统会自动应用并回写看板。
-C) path 语法（patch 用点分段；read 用文件路径）
-- read.path 文件路径示例：角色名/description、角色名/worldbook/角色背景、角色名/regex_scripts/表情替换、角色名/tavern_helper/scripts/脚本名（支持 [0] 索引）。
-- path 由“点分段 key”组成；每段只允许：英数下划线 key；可选单个数组索引 [i]。
-- 示例：worldbook.entries[0].content、regex_scripts[0].find.pattern、tavern_helper.variables.someKey。
-- 不支持：带引号的 key、不支持 key 中的 -/空格/中文、不支持同一段里多个索引。
+═══════════════════════════════════════════════════════════════
+第二部分：VCard 输出协议与语法
+═══════════════════════════════════════════════════════════════
 
-D) remove 支持范围（不要写了也不生效）
-- remove 仅支持：
+A) tool_use 格式
+<tool_use>
+<name>{kind}</name>
+<parameters>{JSON对象或数组}</parameters>
+</tool_use>
+
+B) kind 速查表
+┌─────────────────────┬─────────────────────────────────────────┐
+│ kind                │ 用途                                     │
+├─────────────────────┼─────────────────────────────────────────┤
+│ card.patch          │ 修改 card.* 与 raw.dataExtensions.*     │
+│ worldbook.patch     │ 修改 worldbook.*                        │
+│ worldbook.target    │ 给出目标态，系统自动转 patch│
+│ regex_scripts.patch │ 修改 regex_scripts.*                    │
+│ regex_scripts.set   │ 全量覆盖 regex_scripts 数组             │
+│ tavern_helper.patch │ 修改 tavern_helper.*                    │
+│ client_scripts.set  │ 全量覆盖 tavern_helper                  │
+└─────────────────────┴─────────────────────────────────────────┘
+
+C) patch 操作规范
+- kind=*.patch 必须包含 patch: []
+- patch[i].op 仅允许：set / remove
+- set 需要：path + value
+- remove 仅需：path
+
+D) path 语法（VCard patch 用）
+格式：点分段.key[索引]
+示例：
+  - worldbook.entries[0].content
+  - regex_scripts[0].find.pattern
+  - tavern_helper.scripts[2].content
+  - tavern_helper.variables.someKey
+
+限制：
+  - 仅允许英数下划线作为 key
+  - 不支持：引号、中文、空格、连字符作为 key
+  - 每段最多一个数组索引
+
+E) remove 支持范围
+仅支持删除：
   - worldbook.entries[i]
   - regex_scripts[i]
   - tavern_helper.scripts[i]
   - tavern_helper.variables.someKey
-- remove 不支持：card.* 任意字段删除；worldbook.entries[i].field 删除；regex_scripts[i].field 删除。
+不支持：card.* 字段删除、条目内部字段删除
 
-E) kind 与根路径速查（防写错 / 防无效输出）
-- card.patch：允许修改 card.* 与 raw.dataExtensions.*（仅此 kind 支持 raw）。
-- worldbook.patch：允许修改 worldbook.*。
-- worldbook.target：给出 worldbook 目标态（name + entries 全量），系统自动转 patch。
-- regex_scripts.patch：允许修改 regex_scripts.*。
-- regex_scripts.set：给出 regex_scripts 全量数组（直接覆盖）。
-- tavern_helper.patch：允许修改 tavern_helper.*。
-- client_scripts.set：给出 tavern_helper 全量（scripts + variables，直接覆盖）。
-- lint.only：仅返回 warnings（用于无修改/只提示）。
+F) card 字段白名单
+card.* 仅允许：
+  name, description, personality, scenario, first_mes, mes_example,
+  creator_notes, system_prompt, post_history_instructions,
+  alternate_greetings（字符串数组）, tags（字符串数组）
 
-G) card 字段白名单（写错字段=无效）
-- card.* 仅允许以下字段（其余字段会被警告并忽略）：
-  - name, description, personality, scenario, first_mes, mes_example
-  - creator_notes, system_prompt, post_history_instructions
-  - alternate_greetings（字符串数组）, tags（字符串数组）
+G) worldbook.entries[i] 字段- id（数字/字符串）, enabled（布尔）, light（blue|green）
+  - keys（字符串数组）, secondary_keys（字符串数组）
+  - secondary_logic: and_any | and_all | not_all | not_any
+  - comment（备注）, content（注入文本）
+  - position: before_char | after_char | before_author_note | 
+              after_author_note | at_depth_system | at_depth_user |
+              at_depth_assistant | before_example_messages |
+              after_example_messages | outlet
+  - at_depth: { depth: 整数 }（仅 position=at_depth_* 时生效）
+  - order: 注入优先级（数值越大越靠前，默认100）
+  - use_regex（布尔）
 
-H) worldbook 速查（与 SillyTavern 对齐）
-- worldbook.name：世界书名（字符串）
-- worldbook.entries[i] Lite 字段：
-  - id（数字/字符串/空均可；建议保持唯一）
-  - enabled（布尔）
-  - light：blue | green
-  - keys（字符串数组；主触发词）
-  - secondary_keys（字符串数组；次触发词）
-  - secondary_logic：and_any | and_all | not_all | not_any（默认 and_any）
-  - comment（备注），content（注入文本）
-  - position（10 位置 key）：before_char、after_char、before_author_note、after_author_note、at_depth_system、at_depth_user、at_depth_assistant、before_example_messages、after_example_messages、outlet
-  - at_depth：仅当 position=at_depth_* 时生效；形如 { depth: 整数 }
-  - order：注入优先级（ST insertion_order）；数值越大越靠前；支持小数；默认 100；必须 >= 0
-  - use_regex（布尔；是否把 keys 当作正则）
-  - raw_extensions（可选 object；未知扩展字段存这里）
-- worldbook.patch 的 set 规则：
-  - set worldbook.entries 可整包覆盖；也可 set worldbook.entries[i] 或 set worldbook.entries[i].field
+参数说明：
+  - light 灯色决定触发方式：
+    - blue（蓝灯）：常驻条目，始终注入，无需关键词匹配(如果需要按阶段进行始终注入，可以使用EJS模板，进行阶段注入)
+    - green（绿灯）：关键词触发，仅当 keys/secondary_keys 匹配聊天内容时注入(通常绿灯触发，需要明确的关键词，需要蓝灯规定跑图ai输出一个规定的提示词才能触发。)
+  - keys 为空数组 [] 时：
+    - 蓝灯条目：正常常驻
+    - 绿灯条目：永远不会触发（因为没有关键词可匹配）
+  - secondary_logic 控制 secondary_keys 的匹配逻辑：
+    - and_any：主关键词匹配 且 副关键词任一匹配
+    - and_all：主关键词匹配 且 副关键词全部匹配
+    - not_any：主关键词匹配 且 副关键词全不匹配
+    - not_all：主关键词匹配 且 副关键词非全部匹配
 
-I) regex_scripts 速查（字段全量 + 常见坑）
-- regex_scripts[i] Lite 字段：
-  - id（字符串），name（字符串），enabled（布尔）
-  - placement（整数数组）：1 USER_INPUT；2 AI_OUTPUT；3 SLASH_COMMAND；5 WORLD_INFO；6 REASONING；0 MD_DISPLAY（deprecated）
-  - find：{ pattern, flags, style }
-    - style=raw：pattern 为正则正文；flags 单独提供（仅允许 g i m s u y；非法字符会被自动剔除并提示）
-    - style=slash：pattern 形如 /.../gimsuy（flags 会从 pattern 末尾解析；若 pattern 不以 / 开头会降级为 raw）
-  - replace（替换文本），trimStrings（字符串数组）
-  - markdownOnly / promptOnly：都不勾=普通；都勾=仅 Markdown 或 Prompt（不覆盖普通）
-  - options：
-    - runOnEdit（布尔）
-    - substituteRegex：0 NONE；1 RAW；2 ESCAPED
-    - minDepth / maxDepth：整数或 null；留空/设为 null 表示不限制；maxDepth < minDepth 视为无效范围
-- 常见坑（会导致“看似成功但不生效”）：
-  - placement 必须是数组：写成 1 会被归一化为 []（等于不运行）；正确写法是 [1]。
-  - trimStrings 必须是数组：写成字符串会变成 []。
-  - findRegex 语法错误会被自动禁用 enabled=false，并给出 warning。
-  - 不建议使用 phase 字段；如必须用，phase=display 会等价 markdownOnly=true；phase=prompt 等价 promptOnly=true；其他值会清空两者。
+  - position 注入位置：
+    - before_char：角色定义之前
+    - after_char：角色定义之后
+    - before_author_note：作者注释之前
+    - after_author_note：作者注释之后
+    - at_depth_system：指定深度，作为 system 角色消息
+    - at_depth_user：指定深度，作为 user 角色消息
+    - at_depth_assistant：指定深度，作为 assistant 角色消息
+    - before_example_messages：示例消息之前
+    - after_example_messages：示例消息之后
+    - outlet：不注入提示词，仅供其他条目引用
+  - at_depth 深度说明（仅 at_depth_* 位置生效）：
+    - depth: 0 = 最新消息之后（AI 即将回复的位置）
+    - depth: 1 = 最新消息之前
+    - depth: N = 从最新消息往前数第 N 条消息之前
+  - secondary_logic 控制 secondary_keys 的匹配逻辑：
+    - and_any：主关键词匹配 且 副关键词任一匹配
+    - and_all：主关键词匹配 且 副关键词全部匹配
+    - not_any：主关键词匹配 且 副关键词全不匹配
+    - not_all：主关键词匹配 且 副关键词非全部匹配
 
-J) tavern_helper 速查
-- tavern_helper.scripts[i]：{ id, name, type, info, enabled, content }
-- tavern_helper.variables：任意 key-value；remove 支持 tavern_helper.variables.someKey
+H) regex_scripts[i] 字段
+  - id, name（字符串）, enabled（布尔）
+  - placement（整数数组）: [1]=USER_INPUT, [2]=AI_OUTPUT, 
+                          [3]=SLASH_COMMAND, [5]=WORLD_INFO, [6]=REASONING
+  - find: { pattern, flags, style }
+    - style=raw: pattern 为正则正文，flags 单独提供（g i m s u y）
+    - style=slash: pattern 形如 /.../flags- replace（替换文本）, trimStrings（字符串数组）
+  - markdownOnly / promptOnly（布尔）
+  - options: { runOnEdit, substituteRegex, minDepth, maxDepth }
 
+参数说明：
+  - placement 作用范围（必须指定，否则正则不生效）：
+    - [1] USER_INPUT：用户输入
+    - [2] AI_OUTPUT：AI 输出
+    - [3] SLASH_COMMAND：斜杠命令
+    - [5] WORLD_INFO：世界书内容
+    - [6] REASONING：推理/思考内容
+    - 可组合，如 [1, 2] 表示同时处理用户输入和 AI 输出
+  - markdownOnly / promptOnly 互斥：
+    - markdownOnly: true：仅在界面显示时替换（不影响发送给 AI 的内容）
+    - promptOnly: true：仅在发送给 AI 时替换（不影响界面显示）
+  - options.minDepth / maxDepth：
+    - 不设置：对所有深度的消息都进行处理
+    - 设置后：仅处理指定深度范围内的消息（depth 从 0 开始计数）
 
-MVU内容:
+常见坑：
+  - placement 必须是数组：写 1 会变成 []，正确写法 [1]
+  - placement 不能为空：[] 或不指定会导致正则完全不生效
+  - trimStrings 必须是数组
+  - 正则语法错误会自动禁用条目
+  - 通常使用 style=slash，而不使用 raw
+  ⚠️ 反斜杠规则（重要）：
+  - pattern 字段中，所有反斜杠只写一个，不要双写
+  - 正确：`/<UpdateVariable>[\s\S]*?<\/UpdateVariable>/g`
+  - 错误：`/<UpdateVariable>[\\s\\S]*?<\\/UpdateVariable>/g`  ← 绝对不要这样写
+  - 这包括：\s \S \d \D \w \W \b \/ \. \* \+ \? 等所有需要反斜杠的地方
+【正则反斜杠硬规则】
+本系统的regex_scripts pattern 字段使用特殊解析器，不遵循标准 JSON 转义规则。
+- 必须：所有反斜杠只写一个 `\`
+- 禁止：写双反斜杠 `\\`
+- 如果你写了 `\\s` 或 `\\/`，正则会失效
 
-  2) 角色卡产物落地清单（MVU 接入时你应该写到哪里）
-  A) tavern_helper.scripts（脚本库）
-  - 必需脚本 1：MVU（加载框架）
-    import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js';
+你输出的 pattern 值应该看起来像普通正则表达式，例如：
+"pattern": "/<tag>[\s\S]*?<\/tag>/g"
 
-  - 必需脚本 2：变量结构（注册 Schema）
-    import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';
-    // Schema 用 zod；数值用 z.coerce.number()；可用 transform 做范围钳制/后处理
-    $(() => { registerMvuSchema(Schema); });
+而不是：
+"pattern": "/<tag>[\\s\\S]*?<\\/tag>/g"  ← 这是错误的！
 
-  - 可选脚本：事件监听/限幅/触发提示词注入（见本教程第八部分）
+I) tavern_helper 字段
+  - scripts[i]: { id, name, type, info, enabled, content }
+  - variables: 任意 key-value 对象
 
-  B) worldbook.entries（世界书条目）
-  - [initvar]变量初始化勿开（必须 disabled=false 但条目 enabled 必须为 false；也就是“条目禁用”）
-    内容用 YAML 写初始变量；删除楼层会回退等行为由 MVU 机制处理.变量结构和[initvar]上数据要匹配的上
+═══════════════════════════════════════════════════════════════
+第三部分：MVU 框架概述
+═══════════════════════════════════════════════════════════════
 
-  - 变量列表（展示当前变量）
-    使用 {{format_message_variable::stat_data}} 等宏
+MVU (MagVarUpdate) 核心功能：
+- 变量持久化：存储在每个消息楼层，删除楼层时自动回退
+- 结构化验证：用 zod schema 定义类型、范围、默认值
+- 自动解析：解析跑团AI输出的 JSON Patch 命令更新变量
+- 界面占位符：自动附加 <StatusPlaceHolderImpl/> 便于显示状态栏
 
-  - [mvu_update]变量更新规则（告诉剧情 AI 什么时候更新什么字段）
-  - [mvu_update]变量输出格式（告诉剧情 AI 输出 <UpdateVariable> 块；注意 op 规范）
+变量筛选原则：
+- 保留：剧情驱动变量（好感度、状态、物品栏、时间、地点等）
+- 剔除：无用元数据（config_version, author_id 等）
+- 一次一小步：只定义核心变量
 
-  C) regex_scripts（正则配置）
-  - [不发送]去除变量更新：删除 <UpdateVariable>...</UpdateVariable>（避免历史更新命令继续喂给 AI）
-  - [不发送]界面占位符：删除 <StatusPlaceHolderImpl/>
-  - [美化/折叠]类脚本：<StatusPlaceHolderImpl/>替换为html，css和js语言，
-比如 
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>统计数据 (YAML View)</title>
-    <style>
-        body {
-            background-color: #f0f2f5;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-        }
+═══════════════════════════════════════════════════════════════
+第四部分：MVU 必需组件清单
+═══════════════════════════════════════════════════════════════
 
-        .card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            width: 90%;
-            max-width: 800px;
-            overflow: hidden;
-        }
+┌────────────────────────────────────────────────────────────────┐
+│ A) tavern_helper.scripts（必需脚本）                           │
+├────────────────────────────────────────────────────────────────┤
+│ 1. MVU 加载脚本                                                │
+│    name: "MVU"                                                 │
+│    content:                                                    │
+│    import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/   │
+│    MagVarUpdate/artifact/bundle.js';                           │
+├────────────────────────────────┤
+│ 2. Schema 注册脚本                                             │
+│    name: "变量结构"                                            │
+│    content: 见下方 Schema 模板                                 │
+└────────────────────────────────┘
 
-        .card-header {
-            background-color: #007bff;
-            color: white;
-            padding: 15px 20px;
-            font-size: 18px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+┌────────────────────────────────────────────────────────────────┐
+│ B) worldbook.entries（必需条目）                               │
+├────────────────────────────────────────────────────────────────┤
+│ 1. [initvar]变量初始化勿开                                     │
+│    enabled: false（必须禁用）                                  │
+│    content: YAML 格式初始变量                                  │
+├────────────────────────────────┤
+│ 2. 变量列表                                                    │
+│    position: at_depth_system, at_depth.depth: 1                │
+│    content: {{format_message_variable::stat_data}}             │
+├────────────────────────────────┤
+│ 3. [mvu_update]变量更新规则                                    │
+│    position: at_depth_system, at_depth.depth: 3-4              │
+│    content: 定义何时更新什么变量                               │
+├────────────────────────────────┤
+│ 4. [mvu_update]变量输出格式                                    │
+│    position: at_depth_system, at_depth.depth: 0                │
+│    content: 定义 <UpdateVariable> 输出格式                     │
+└────────────────────────────────────────────────────────────────┘
 
-        .badge {
-            background-color: rgba(255,255,255,0.2);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-family: monospace;
-        }
+┌────────────────────────────────┐
+│ C) regex_scripts（必需正则）                                   │
+├────────────────────────────────────────────────────────────────┤
+│ 1. [不发送]去除变量更新                                        │
+│    find: <UpdateVariable>[\s\S]*?</UpdateVariable>             │
+│    replace: （空）                                             │
+│    promptOnly: true                │
+├────────────────────────────────┤
+│ 2. [不发送]界面占位符                                          │
+│    find: <StatusPlaceHolderImpl/>                              │
+│    replace: （空）                                             │
+│    promptOnly: true                                            │
+├────────────────────────────────┤
+│ 3. [美化]状态栏显示                                            │
+│    find: <StatusPlaceHolderImpl/>                              │
+│    replace: HTML/CSS 美化内容（见下方模板）                    │
+│    markdownOnly: true                │
+│    注意：数据格式固定为 YAML，必须用 <pre> 保留缩进            │
+└────────────────────────────────────────────────────────────────┘
 
-        .card-body {
-            padding: 0;
-            background-color: #282c34; /* 模仿 IDE 背景色 */
-        }
+═══════════════════════════════════════════════════════════════
+第五部分：路径一致性规范（重要）
+═══════════════════════════════════════════════════════════════
 
-        /* 关键部分：用于展示 YAML */
-        pre.yaml-display {
-            margin: 0;
-            padding: 20px;
-            color: #abb2bf;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; /* 等宽字体 */
-            font-size: 14px;
-            line-height: 1.5;
-            overflow-x: auto; /*如果行太长，允许横向滚动 */
-            white-space: pre; /* 强制保留空格和换行，这对 YAML 至关重要 */
-        }
+四处路径必须对应：
 
-        /* 简单的语法高亮模拟 (黄色) */
-        .highlight-key {
-            color: #e5c07b;
-        }
-    </style>
-</head>
-<body>
+1. Schema 定义（脚本）:
+   白娅: z.object({ 好感度: z.coerce.number() })
 
-    <div class="card">
-        <div class="card-header">
-            <span>📊 统计数据监控</span>
-            <span class="badge">FORMAT: YAML</span>
-        </div>
-        <div class="card-body">
-            <!-- 
-                关键点：
-                这里使用 pre 标签，能够原样保留后端传来的 YAML 缩进和换行。
-                宏定义直接放在这里。
-            -->
-            <pre class="yaml-display" id="yamlContent">{{format_message_variable::stat_data}}</pre>
-        </div>
-    </div>
+2. YAML 初始化（[initvar]条目）:
+   白娅:
+     好感度: 30
 
-    <script>
-        // 高级用法：如果你想在 JS 里处理这个 YAML 数据
-        // 我们使用模板字符串 (反引号 `) 来包裹宏，这样可以支持多行文本
-        
-        const rawYamlData = `{{format_message_variable::stat_data}}`;
+3. JSON Patch 路径（跑团AI输出）:
+   { "op": "replace", "path": "/白娅/好感度", "value": 50 }
 
-        console.log("--- 原始 YAML 数据 ---");
-        console.log(rawYamlData);
+4. 宏引用（世界书条目）:
+   {{format_message_variable::stat_data.白娅.好感度}}
 
-        // 如果你将来需要解析它，可以引入 js-yaml 库
-        // 例如: const jsonObj = jsyaml.load(rawYamlData);
-        
-        // 简单的自动高亮逻辑 (仅为了好看，把 Key 变成黄色)
-        // 这段代码会查找冒号前的单词并加上颜色
-        const preBlock = document.getElementById('yamlContent');
-        if(preBlock) {
-            // 获取原始内容（防止宏替换后 HTML 转义问题）
-            let content = preBlock.innerHTML;
-            // 简单的正则替换，给 key 加颜色
-            // 注意：这只是简单的视觉美化，不是严谨的语法高亮
-            content = content.replace(/^(\s*)([\w\d_-]+):/gm, '$1<span class="highlight-key">$2</span>:');
-            preBlock.innerHTML = content;
-        }
-    </script>
-</body>
-</html>
+注意区分：
+- VCard patch 路径：点分段，如 worldbook.entries[0].content
+- JSON Patch 路径：斜杠分段，如 /白娅/好感度
+
+═══════════════════════════════════════════════════════════════
+第六部分：Schema 模板与 zod 语法
+═══════════════════════════════════════════════════════════════
+
+基本框架：
+```ts
+import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';
+
+export const Schema = z.object({
+  // 在这里定义变量结构
+});
+
+$(() => {
+  registerMvuSchema(Schema);
+});
 ```
 
-  ---
+zod 类型速查：
+┌──────────────────┬─────────────────────────────────────────────┐
+│ 类型             │ 写法                                         │
+├──────────────────┼─────────────────────────────────────────────┤
+│ 数值             │ z.coerce.number()（必须用 coerce）           │
+│ 整数             │ z.coerce.number().int()                      │
+│ 范围钳制         │ z.coerce.number().transform(v=>_.clamp(v,0,100)) │
+│ 文本             │ z.string()                                   │
+│ 布尔             │ z.boolean()                                  │
+│ 枚举             │ z.enum(['值1', '值2', '值3'])                │
+│ 固定值           │ z.literal('固定文本')                        │
+│ 固定字段对象     │ z.object({ key: type })                      │
+│ 动态字段对象     │ z.record(keyType, valueType)                 │
+│ 可选字段对象     │ z.partialRecord(keyType, valueType)          │
+│ 混合对象         │ z.intersection(z.object({...}), z.record(...)) │
+│ 默认值           │ .prefault(默认值)                            │
+│ 后处理           │ .transform(data => 处理逻辑)                 │
+│ 描述             │ .describe('说明文字')                        │
+└──────────────────┴─────────────────────────────────────────────┘
 
-  # MVU 变量框架完整教程 
+特殊前缀：
+- `_` 开头：跑团AI可见但不能修改（只读）
+- `$` 开头：跑团AI完全不可见（仅脚本使用）
 
-  ## 第一部分：基础概念与安装
-
-  ### 1.1 MVU 是什么
-
-  MVU (MagVarUpdate) 是 SillyTavern 酒馆助手的变量管理框架，核心功能：
-
-  - **变量持久化**：变量存储在每个消息楼层，删除楼层时自动回退
-  - **结构化验证**：用 zod schema 定义变量类型、范围、默认值
-  - **自动解析**：解析 AI 输出的 JSON Patch 命令更新变量
-  - **界面占位符**：自动附加 `<StatusPlaceHolderImpl/>` 便于显示状态栏
-
-  ### 1.2 必需插件
-
-  用户和玩家都需要安装：
-  - **酒馆助手**
-  - **提示词模板**
-
-  ### 1.3 导入 MVU 脚本
-
-  在角色卡的脚本库中新建脚本（如命名为 `MVU`），内容：
-
-  ```ts
-  import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js';
-  ```
-
-  ---
-
-  ## 第二部分：变量结构 (Schema)
-
-  ### 2.1 基本框架
-
-  ```ts
-  import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';
-
-  export const Schema = z.object({
-    // 在这里定义变量结构
-  });
-
-  $(() => {
-    registerMvuSchema(Schema);
-  });
-  ```
-
-  ### 2.2 基础类型
-
-  | 类型 | zod 写法 | 对应 YAML 示例 |
-  |------|----------|----------------|
-  | 数值 | `z.coerce.number()` | `好感度: 50` |
-  | 文本 | `z.string()` | `状态: 开心` |
-  | 布尔 | `z.boolean()` | `死亡: false` |
-  | 对象 | `z.object({...})` | 嵌套结构 |
-
-  **重要**：始终用 `z.coerce.number()` 而非 `z.number()`，因为 AI 经常把数值写成字符串。
-
-  ### 2.3 文本限制
-
-  ```ts
-  // 只能是固定值
-  z.literal('晴天')
-
-  // 只能是几种值之一
-  z.enum(['进行中', '已完成', '已失败'])
-
-  // 多种类型
-  z.literal('晴天').or(z.literal('雨天'))
-  // 或
-  z.union([z.literal('晴天'), z.literal('雨天'), z.literal('阴天')])
-
-  // 特定格式 (如 "D1.C2.E3.S4")
-  z.templateLiteral([
-    z.literal('D'), z.coerce.number(),
-    z.literal('.C'), z.coerce.number(),
-    z.literal('.E'), z.coerce.number(),
-    z.literal('.S'), z.coerce.number(),
-  ])
-  ```
-
-  ### 2.4 数值限制
-
-  ```ts
-  // 整数
-  z.coerce.number().int()
-
-  // 范围限制（超出则拒绝）
-  z.coerce.number().min(0).max(100)
-
-  // 范围钳制（超出则修正）—— 推荐
-  z.coerce.number().transform(v => _.clamp(v, 0, 100))
-
-  // 最小值钳制
-  z.coerce.number().transform(v => Math.max(v, 0))
-  ```
-
-  ### 2.5 对象类型
-
-  #### 固定字段对象 `z.object`
-
-  ```ts
+Schema 示例：
+```ts
+export const Schema = z.object({
   白娅: z.object({
-    好感度: z.coerce.number(),
+    好感度: z.coerce.number().transform(v => _.clamp(v, 0, 100)),
     状态: z.string(),
-  })
-  ```
-
-  #### 动态字段对象 `z.record`
-
-  ```ts
-  // 物品栏：键是物品名，值是物品信息
-  物品栏: z.record(
-    z.string().describe('物品名'),
-    z.object({
-      描述: z.string(),
-      数量: z.coerce.number().int().prefault(1),
-    })
-  )
-
-  // 限定键名范围
-  能力面板: z.record(
-    z.enum(['力量', '敏捷', '体质', '智力', '感知', '魅力']),
-    z.coerce.number()
-  )
-  ```
-
-  #### 可选字段 `z.partialRecord`
-
-  ```ts
-  // 字段可有可无（不要求全部存在）
-  羁绊: z.partialRecord(
-    z.enum(['角色A', '角色B', '角色C']),
-    z.coerce.number()
-  )
-  ```
-
-  #### 混合模式 `z.intersection`
-
-  ```ts
-  // 既有固定字段，又能扩展
-  角色: z.intersection(
-    z.object({
-      名字: z.string(),
-      年龄: z.coerce.number(),
-    }),
-    z.record(z.string(), z.any())  // 允许其他任意字段
-  )
-  ```
-
-  ### 2.6 默认值 `.prefault()`
-
-  当 跑团 AI 创建新条目时省略某字段，自动填充默认值：
-
-  ```ts
+    着装: z.object({
+      上装: z.string(),
+      下装: z.string(),}),
+  世界: z.object({
+    _类型: z.string(),  // 只读
+    当前时间: z.string(),
+    当前地点: z.string(),}),
+  主角: z.object({
+    物品栏: z.record(
+      z.string().describe('物品名'),
+      z.object({
+        描述: z.string(),
+        数量: z.coerce.number().int().prefault(1),
+      })
+    ).transform(data => _.pickBy(data, ({数量}) => 数量 > 0)),}),
   npc: z.record(
     z.string().describe('npc名'),
     z.object({
       好感度: z.coerce.number().prefault(0),
       状态: z.string().prefault('待初始化'),
-      死亡: z.boolean().prefault(false),
     })
-  )
-  ```
+  ),
+});
+```
 
-  ### 2.7 后处理 `.transform()`
+═══════════════════════════════════════════════════════════════
+第七部分：世界书条目模板
+═══════════════════════════════════════════════════════════════
 
-  ```ts
-  // 删除数量≤0的物品
-  物品栏: z.record(...).transform(data => _.pickBy(data, ({数量}) => 数量 > 0))
+【条目1】[initvar]变量初始化勿开
+- enabled: false（必须禁用）
+- keys: ["[initvar]"]
+- content:
+```yaml
+白娅:
+  好感度: 30
+  状态: 正常
+  着装:
+    上装: 校服外套
+    下装: 百褶裙
+世界:
+  _类型: 现代校园
+  当前时间: 2025年1月1日 10:00
+  当前地点: 教室
+主角:
+  物品栏:
+    创可贴:
+      描述: 旧的卡通创可贴
+      数量: 1
+```
 
-  // 称号数量上限（依存度/10 向上取整）
-  称号: z.record(...)
-    .transform(data => _(data).entries().takeRight(Math.ceil(依存度 / 10)).fromPairs().value()
-    )
-  ```
+【条目2】变量列表
+- enabled: true
+- position: at_depth_system
+- at_depth: { depth: 1 }
+- keys: []（常驻）
+- content:
+```yaml
+---
+<status_current_variable>
+{{format_message_variable::stat_data}}
+</status_current_variable>
+```
 
-  ### 2.8 特殊前缀
-
-  | 前缀 | 效果 | 用途 |
-  |------|------|------|
-  | `_` | 跑团AI 不能更新 | 只读变量，如 `_世界类型` |
-  | `$` | 跑团AI 看不到 | 仅供脚本使用，如 `$内部标记` |
-
-  ```ts
-  世界: z.object({
-    _类型: z.string(),      // AI 可见但不能改
-    $内部计数: z.number(),  // AI 完全不知道
-    当前时间: z.string(),   // 正常变量
-  })
-  ```
-
-  ### 2.9 描述 `.describe()`
-
-  ```ts
-  z.string().describe('物品名称')  // 便于理解变量用途
-  ```
-
-  ---
-
-  ## 第三部分：变量初始化
-
-  ### 3.1 世界书条目方式
-
-  创建条目，名称包含 `[initvar]`，**必须禁用**：
-
-  **条目名**：`[initvar]变量初始化勿开`
-
-  **内容**（YAML 格式）：
-
-  ```yaml
+【条目3】[mvu_update]变量更新规则
+- enabled: true
+- position: at_depth_system
+- at_depth: { depth: 4 }
+- keys: []（常驻）
+- content:
+```yaml
+---
+变量更新规则:
   白娅:
-    好感度: 30
-    状态: 正常
-    着装:
-      上装: 校服外套
-      下装: 百褶裙
+    好感度:
+      type: number
+      range: 0~100
+      check:
+        - 根据白娅对用户行为的感知调整 ±(3~6)
+        - 仅在白娅察觉到用户行为时更新
+    着装.${上装|下装}:
+      check:
+        - 换装、衣物损坏时更新
+        - 描述需包含颜色、材质、款式
   世界:
-    当前时间: 2025年1月1日 10:00
-    当前地点: 教室
+    当前时间:
+      format: YYYY年MM月DD日 HH:MM
+    当前地点:
+      check: 场景转换时更新
   主角:
     物品栏:
-      创可贴:
-        描述: 旧的卡通创可贴
-        数量: 1
-  ```
-
-  ### 3.2 开局消息内嵌方式
-
-  在开局消息中使用 `<initvar>` 块，**会完全覆盖世界书条目**：
-
-  ```text
-  开局剧情内容...
-
-  <UpdateVariable>
-  <initvar>
-  白娅:
-    好感度: 50
-    状态: 兴奋
-  世界:
-    当前时间: 2025年1月1日 14:00
-    当前地点: 公园
-  </initvar>
-  </UpdateVariable>
-  ```
-
-  也可以包裹代码块：
-
-  ```text
-  <UpdateVariable>
-  <initvar>
-  ```yaml
-  白娅:
-    好感度: 50
-  ```
-  </initvar>
-  </UpdateVariable>
-  ```
-
-  ### 3.3 增量更新方式
-
-  只修改部分变量，其余沿用 `[initvar]` 条目：
-
-  ```text
-  开局剧情内容...
-
-  <UpdateVariable>
-  <JSONPatch>
-  [
-    { "op": "replace", "path": "/白娅/好感度", "value": 50 },
-    { "op": "replace", "path": "/世界/当前地点", "value": "咖啡厅" }
-  ]
-  </JSONPatch>
-  </UpdateVariable>
-  ```
-
-  ### 3.4 验证初始化
-
-  1. 确保 API 配置选择「聊天补全」
-  2. 角色卡有开局消息
-  3. **新开聊天**
-  4. 检查日志查看器：应显示「变量结构注册成功」
-  5. 打开变量管理器 → 消息楼层，查看变量
-
-  ---
-
-  ## 第四部分：变量提示词
-
-  ### 4.1 三大提示词概述
-
-  | 提示词 | 作用 | 建议位置 |
-  |--------|------|----------|
-  | 变量列表 | 告诉 跑团AI 当前变量值 | D1 或 D0 |
-  | 变量更新规则 | 告诉跑团 AI 何时如何更新 | 角色定义之后或 D3/D4 |
-  | 变量输出格式 | 告诉跑团 AI 输出什么格式 | D0 |
-
-  ### 4.2 变量列表
-
-  **条目名**：`变量列表`
-  **位置**：D1 或 D0
-  **内容**：
-
-  ```yaml
-  ---
-  <status_current_variable>
-  {{format_message_variable::stat_data}}
-  </status_current_variable>
-  ```
-
-  `{{format_message_variable::路径}}` 是酒馆助手宏，会被替换为变量的 YAML 格式。
-
-  **指定路径**：
-  ```text
-  {{format_message_variable::stat_data.白娅.好感度}}  → 输出: 30
-  {{format_message_variable::stat_data.白娅}}        → 输出白娅的所有变量
-  ```
-
-  ### 4.3 变量更新规则
-
-  **条目名**：`[mvu_update]变量更新规则`
-  **位置**：角色定义之后 或 D3/D4（减少注意力占用）
-
-  ```yaml
-  ---
-  变量更新规则:
-    白娅:
-      好感度:
-        type: number
-        range: 0~100
-        check:
-          - 根据白娅对用户行为的感知调整 ±(3~6)
-          - 仅在白娅察觉到用户行为时更新
-      着装.${上装|下装|内衣|袜子|鞋子}:
-        check:
-          - 换装、衣物损坏时更新
-          - 描述需包含颜色、材质、款式
-      称号:
-        type: |-
-          {
-            [称号名: string]: {
-              效果: string;
-              自我评价?: string;  // 默认'待评价'
-            }
+      type: |-
+        {
+          [物品名: string]: {
+            描述: string;
+            数量?: number;  // 默认1
           }
-        check:
-          - 基于重要行为或心理变化获得
-          - 最多保持 Math.ceil(好感度/10) 个
-    世界:
-      当前时间:
-        format: YYYY年MM月DD日 HH:MM
-    主角:
-      物品栏:
-        type: |-
-          {
-            [物品名: string]: {
-              描述: string;
-              数量?: number;  // 默认1
-            }
-          }
-        check:
-          - 获取、消耗、丢弃时更新
-          - 数量归零后自动删除
-  ```
+        }
+      check:
+        - 获取、消耗、丢弃时更新
+        - 数量归零后自动删除
+```
 
-  **字段说明**：
-  - `type`：变量类型说明
-  - `range`：数值范围
-  - `format`：格式要求
-  - `check`：更新条件和规则
-
-  **技巧**：可以直接把变量结构代码放进 `type` 字段。
-
-  ### 4.4 变量输出格式
-
-  **条目名**：`[mvu_update]变量输出格式`
-  **位置**：D0
-
-  ```yaml
-  ---
-  变量输出格式:
-    rule:
-      - 在回复末尾输出更新分析和更新命令
-      - 更新命令使用 JSON Patch 格式，支持操作：
-        - replace: 替换已存在的值
-        - delta: 数值增减
-        - insert: 插入新字段（数组用 `-` 表示追加）
-        - remove: 删除字段
-      - 不要更新以 `_` 开头的只读变量
-    format: |-
-      <UpdateVariable>
-      <Analysis>$(英文，不超过80词)
-      - ${计算经过时间: ...}
-      - ${判断是否允许剧烈变化: yes/no}
-      - ${基于check分析每个变量: ...}
-      </Analysis>
-      <JSONPatch>
-      [
-        { "op": "replace", "path": "${/路径}", "value": "${新值}" },
-        { "op": "delta", "path": "${/数值路径}", "value": "${变动值}" },
-        { "op": "insert", "path": "${/对象/新键}", "value": "${新值}" },
-        { "op": "insert", "path": "${/数组/-}", "value": "${新值}" },
-        { "op": "remove", "path": "${/路径}" },
-        ...
-      ]
-      </JSONPatch>
-      </UpdateVariable>
-  ```
-
-  **格式语法说明**：
-  - `${描述}` →跑团 AI 根据描述填充内容
-  - `$(要求)` →跑团 AI 遵循但不输出
-  - `...` →跑团 AI 仿照前面补充
-
-  ### 4.5 输出格式强调（可选）
-
-  如果跑团 AI 不输出更新块，添加强调条目：
-
-  **条目名**：`[mvu_update]变量输出格式强调`
-  **位置**：D0
-
-  ```yaml
-  ---
-  变量输出格式强调:
-    rule: 以下内容必须插入回复末尾，不可省略
-    format: |-
-      <UpdateVariable>
+【条目4】[mvu_update]变量输出格式
+- enabled: true
+- position: at_depth_system
+- at_depth: { depth: 0 }
+- keys: []（常驻）
+- content:
+```yaml
+---
+变量输出格式:
+  rule:
+    - 在回复末尾输出更新分析和更新命令
+    - 更新命令使用 JSON Patch 格式，支持操作：
+      - replace: 替换已存在的值
+      - delta: 数值增减
+      - insert: 插入新字段（数组用 `-` 表示追加）
+      - remove: 删除字段
+    - 不要更新以 `_` 开头的只读变量
+  format: |-
+    <UpdateVariable>
+    <Analysis>$(英文，不超过80词)
+    - ${计算经过时间: ...}
+    - ${判断是否允许剧烈变化: yes/no}
+    - ${基于check分析每个变量: ...}
+    </Analysis>
+    <JSONPatch>
+    [
+      { "op": "replace", "path": "${/路径}", "value": "${新值}" },
+      { "op": "delta", "path": "${/数值路径}", "value": ${变动值} },
+      { "op": "insert", "path": "${/对象/新键}", "value": ${新值} },
+      { "op": "remove", "path": "${/路径}" },
       ...
-      </UpdateVariable>
-  ```
+    ]
+    </JSONPatch>
+    </UpdateVariable>
+```
 
-  ---
+格式语法说明：
+- `${描述}` → 跑团AI根据描述填充内容
+- `$(要求)` → 跑团AI遵循但不输出
+- `...` → 跑团AI仿照前面补充
 
-  ## 第五部分：正则配置
+【条目5】[mvu_update]变量输出格式强调（可选）
+- enabled: true
+- position: at_depth_system
+- at_depth: { depth: 0 }
+- order: 50（低于输出格式）
+- content:
+```yaml
+---
+变量输出格式强调:
+  rule: 以下内容必须插入回复末尾，不可省略
+  format: |-
+    <UpdateVariable>
+    ...
+    </UpdateVariable>
+```
 
-  ### 5.1 必需正则
+═══════════════════════════════════════════════════════════════
+第八部分：正则脚本模板
+═══════════════════════════════════════════════════════════════
 
-  需要导入三个正则处理 `<UpdateVariable>` 块：
+【正则1】[不发送]去除变量更新
+```json
+{
+  "id": "mvu_remove_update",
+  "name": "[不发送]去除变量更新",
+  "enabled": true,
+  "placement": [2],
+  "find": {
+    "pattern": "/<UpdateVariable>[\s\S]*?<\/UpdateVariable>/g",
+    "style": "slash"
+  },
+  "replace": "",
+  "promptOnly": true,
+  "markdownOnly": false
+}
+```
 
-  **1. [不发送]去除变量更新**
-  - 查找：`<UpdateVariable>[\s\S]*?</UpdateVariable>`
-  - 替换：（空）
-  - 勾选：仅格式提示词
-  - 作用：不发送历史更新命令给 AI
+【正则2】[不发送]界面占位符
+```json
+{
+  "id": "mvu_remove_placeholder",
+  "name": "[不发送]界面占位符",
+  "enabled": true,
+  "placement": [2],
+  "find": {
+    "pattern": "/<StatusPlaceHolderImpl\/>/g",
+    "style": "slash"
+  },
+  "replace": "",
+  "promptOnly": true,
+  "markdownOnly": false
+}
+```
 
-  **2. [美化/折叠]变量更新中**
-  - 作用：流式输出时的显示美化
-  - 勾选：仅格式显示
+【正则3】[美化]状态栏显示
+重要说明：
+- {{format_message_variable::stat_data}} 宏输出**固定为 YAML 格式**
+- 必须使用 <pre> 标签保留 YAML 的缩进和换行
+- white-space: pre 是关键 CSS 属性
+- replace 字段需要包含完整的 HTML 代码块（含 ```html 和 ``` 标记）
 
-  **3. [美化/折叠]完整变量更新**
-  - 作用：完成后的显示美化
-  - 勾选：仅格式显示
+```json
+{
+  "id": "mvu_status_display",
+  "name": "[美化]状态栏显示",
+  "enabled": true,
+  "placement": [2],
+  "find": {
+    "pattern": "/<StatusPlaceHolderImpl\/>/g",
+    "style": "slash"
+  },
+  "replace": "见下方HTML模板（需包含```html和```标记）",
+  "promptOnly": false,
+  "markdownOnly": true
+}
+```
 
-  ### 5.2 最小深度设置
+状态栏 HTML 模板（示例）：
 
-  如果跑团 AI 重复更新已处理过的剧情，可设置「去除变量更新」正则的最小深度为 4，保留最后几楼的更新命令发给 AI。
-
-  ---
-
-  ## 第六部分：跑团AI 输出示例
-
-  ### 6.1 完整输出
-
-  ```text
-  白娅看着你递过来的薄荷糖，手指微微颤抖...
-
-  <UpdateVariable>
-  <Analysis>
-  - Time passed: 10 minutes (from 10:47 to 10:57)
-  - Dramatic change: No, routine interaction
-  - 白娅.好感度: User showed kindness with candy, she noticed and was touched. +5 appropriate.
-  - 主角.物品栏: Mints given to 白娅, remove from inventory.
-  - 世界.当前时间: Advance 10 minutes.
-  </Analysis>
-  <JSONPatch>
-  [
-    { "op": "replace", "path": "/世界/当前时间", "value": "2025年1月1日 10:57" },
-    { "op": "delta", "path": "/白娅/好感度", "value": 5 },
-    { "op": "remove", "path": "/主角/物品栏/薄荷糖" }
-  ]
-  </JSONPatch>
-  </UpdateVariable>
-  ```
-
-  ### 6.2 JSON Patch 操作详解
-
-  | 操作 | 用途 | 示例 |
-  |------|------|------|
-  | replace | 替换已存在的值 | `{"op":"replace","path":"/白娅/状态","value":"开心"}` |
-  | delta | 数值增减 | `{"op":"delta","path":"/白娅/好感度","value":5}` |
-  | insert | 新增字段 | `{"op":"insert","path":"/物品栏/新物品","value":{"描述":"...","数量":1}}` |
-  | remove | 删除字段 | `{"op":"remove","path":"/物品栏/旧物品"}` |
-
-  **路径格式**：`/一级/二级/三级`，如 `/白娅/着装/上装`
-
-  ---
-
-  ## 第七部分：提示词模板 (EJS) 写到世界书中，减少跑团AI Token消耗
-
-  ### 7.1 基本语法
-
-  ```ejs
-  <%_ 代码 _%>        <!-- 执行代码，不输出 -->
-  <%= 表达式 %>       <!-- 输出表达式结果 -->
-  ```
-
-  ### 7.2 条件判断
-
-  ```ejs
-  <%_ if (getvar('stat_data.白娅.好感度') < 30) { _%>
-  【白娅对你态度冷淡】
-  <%_ } else if (getvar('stat_data.白娅.好感度') < 60) { _%>
-  【白娅对你态度友好】
-  <%_ } else { _%>
-  【白娅对你非常亲密】
-  <%_ } _%>
-  ```
-
-  ### 7.3 使用 print 输出
-
-  ```ejs
-  <%_
-  const 好感度 = getvar('stat_data.白娅.好感度');
-  if (好感度 < 30) {
-    print('【态度冷淡】');
-  } else if (好感度 < 60) {
-    print('【态度友好】');
-  } else {
-    print('【非常亲密】');
-  }
-  _%>
-  ```
-
-  ### 7.4 引用其他条目
-
-  ```ejs
-  <%_
-  if (getvar('stat_data.白娅.好感度') >= 80) {
-    print(await getwi('高好感度专属剧情'));  // 引用名为「高好感度专属剧情」的条目
-  }
-  _%>
-  ```
-
-  ### 7.5 关键词匹配
-
-  ```ejs
-  <%_ if (matchChatMessages(['战斗', '攻击'])) { _%>
-  【进入战斗模式】
-  <%_ } _%>
-  ```
-
-  **扩展选项**：
-  ```ejs
-  // 扫描最后4楼
-  matchChatMessages(['关键词'], { start: -4 })
-
-  // 仅扫描用户输入
-  matchChatMessages(['关键词'], { role: 'user' })
-  ```
-
-  ### 7.6 文本比较
-
-  ```ejs
-  <%_ if (getvar('stat_data.世界.天气') === '晴天') { _%>
-  【阳光明媚】
-  <%_ } _%>
-  ```
-
-  ### 7.7 默认值处理
-
-  ```ejs
-  // 变量不存在时使用默认值
-  getvar('stat_data.白娅.好感度', { defaults: 0 })
-
-  // 判断变量是否存在
-  <%_ if (getvar('stat_data.白娅.好感度') !== undefined) { _%>
-  ...
-  <%_ } _%>
-  ```
-
-  ### 7.8 格式化输出
-
-  ```ejs
-  // JSON 格式
-  <%= JSON.stringify(getvar('stat_data')) %>
-
-  // YAML 格式
-  <%= YAML.stringify(getvar('stat_data'), { blockQuote: 'literal' }) %>
-
-  // 随机数
-  <%= _.random(0, 10) %>
-
-  // 随机选择
-  <%= _.sample(['选项A', '选项B', '选项C']) %>
-  ```
-
-  ### 7.9 预处理模式
-
-  在条目内容开头添加 `@@preprocessing`，使 EJS 在世界书激活**之前**处理，支持绿灯激活：
-
-  ```ejs
-  @@preprocessing
-  <%_ if (getvar('stat_data.白娅.好感度') >= 50) { _%>
-  高好感度关键词
-  <%_ } _%>
-  ```
-
-  ### 7.10 调试
-
-  ```ejs
-  <%_ alert(`当前好感度: ${getvar('stat_data.白娅.好感度')}`); _%>
-  <%_ toastr.info('触发了某条件'); _%>
-  <%_ debugger; _%>  <!-- 触发浏览器断点 -->
-  ```
-
-  ---
-
-  ## 第八部分：酒馆助手脚本
-
-  ### 8.1 等待初始化
-
-  所有 MVU 相关代码前必须添加：
-
-  ```ts
-  await waitGlobalInitialized('Mvu');
-  ```
-
-  ### 8.2 事件监听
-
-  #### COMMAND_PARSED：命令解析完成
-
-  ```ts
-  await waitGlobalInitialized('Mvu');
-  eventOn(Mvu.events.COMMAND_PARSED, commands => {
-    commands.forEach(command => {
-      // 修复路径中的多余字符
-      command.args[0] = command.args[0].replaceAll('-', '');
-    });
-  });
-  ```
-
-  #### VARIABLE_UPDATE_ENDED：更新结束
-
-  ```ts
-  await waitGlobalInitialized('Mvu');
-  eventOn(Mvu.events.VARIABLE_UPDATE_ENDED, (new_vars, old_vars) => {
-    // 限制变动幅度
-    const old_val = _.get(old_vars, 'stat_data.白娅.好感度');
-    _.update(new_vars, 'stat_data.白娅.好感度', v => _.clamp(v, old_val - 5, old_val + 5));
-
-    // 检测突破
-    const new_val = _.get(new_vars, 'stat_data.白娅.好感度');
-    if (old_val < 50 && new_val >= 50) {
-      toastr.success('好感度突破50！');
+replace 字段内容：
+~~~
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  <style>
+    .mvu-card {
+      background: #282c34;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 10px 0;
+      font-family: 'Consolas', 'Monaco', monospace;
+      max-width: 500px;
     }
+    .mvu-header {
+      background: #007bff;
+      color: white;
+      padding: 10px 15px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .mvu-badge {
+      background: rgba(255,255,255,0.2);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .mvu-body {
+      padding: 15px;
+      color: #abb2bf;
+      font-size: 14px;
+    }
+    .yaml-item {
+      padding: 6px 0;
+      border-bottom: 1px solid #3e4451;
+    }
+    .yaml-item:last-child {
+      border-bottom: none;
+    }
+    .yaml-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .yaml-key {
+      color: #e5c07b;
+    }
+    .yaml-value {
+      color: #98c379;
+    }
+    .yaml-value.number {
+      color: #d19a66;
+    }
+    .yaml-value.boolean {
+      color: #c678dd;
+    }
+    .yaml-value.null {
+      color: #636d83;
+      font-style: italic;
+    }
+    .yaml-nested {
+      margin-left: 20px;
+      padding-left: 10px;
+      border-left: 2px solid #3e4451;
+    }
+    .yaml-array-index {
+      color: #61afef;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="mvu-card">
+    <div class="mvu-header">
+      <span>📊 状态面板</span>
+      <span class="mvu-badge">YAML</span>
+    </div>
+    <div class="mvu-body" id="yaml-container"></div>
+  </div>
+
+  <script id="yaml-data" type="text/yaml">
+{{format_message_variable::stat_data}}
+  </script>
+
+  <script>
+    (function() {
+      const yamlText = document.getElementById('yaml-data').textContent;
+      const container = document.getElementById('yaml-container');
+      
+      try {
+        const data = jsyaml.load(yamlText);
+        container.appendChild(renderValue(data));
+      } catch (e) {
+        container.innerHTML = '<span style="color:#e06c75">YAML解析错误: ' + e.message + '</span>';
+      }
+
+      // 递归渲染任意值
+      function renderValue(value, key = null) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'yaml-item';
+
+        if (value === null || value === undefined) {
+          wrapper.innerHTML = createRow(key, '<span class="yaml-value null">null</span>');
+        } 
+        else if (typeof value === 'object' && !Array.isArray(value)) {
+          // 对象
+          if (key !== null) {
+            const keySpan = document.createElement('div');
+            keySpan.innerHTML = `<span class="yaml-key">${key}</span>:`;
+            wrapper.appendChild(keySpan);
+          }
+          const nested = document.createElement('div');
+          nested.className = key !== null ? 'yaml-nested' : '';
+          Object.entries(value).forEach(([k, v]) => {
+            nested.appendChild(renderValue(v, k));
+          });
+          wrapper.appendChild(nested);
+        } 
+        else if (Array.isArray(value)) {
+          // 数组
+          if (key !== null) {
+            const keySpan = document.createElement('div');
+            keySpan.innerHTML = `<span class="yaml-key">${key}</span>:`;
+            wrapper.appendChild(keySpan);
+          }
+          const nested = document.createElement('div');
+          nested.className = key !== null ? 'yaml-nested' : '';
+          value.forEach((item, index) => {
+            const itemWrapper = document.createElement('div');
+            itemWrapper.className = 'yaml-item';
+            itemWrapper.innerHTML = `<span class="yaml-array-index">[${index}]</span>`;
+            const itemContent = renderValue(item);
+            itemContent.className = 'yaml-nested';
+            itemWrapper.appendChild(itemContent);
+            nested.appendChild(itemWrapper);
+          });
+          wrapper.appendChild(nested);
+        } 
+        else {
+          // 基本类型
+          const typeClass = typeof value === 'number' ? 'number' : 
+                           typeof value === 'boolean' ? 'boolean' : '';
+          wrapper.innerHTML = createRow(key, `<span class="yaml-value ${typeClass}">${value}</span>`);
+        }
+
+        return wrapper;
+      }
+
+      function createRow(key, valueHtml) {
+        if (key === null) return valueHtml;
+        return `<div class="yaml-row">
+          <span class="yaml-key">${key}</span>
+          ${valueHtml}
+        </div>`;
+      }
+    })();
+  </script>
+</body>
+</html>
+```
+~~~
+
+注意事项：
+- replace 字段必须包含 ```html 开头和 ``` 结尾标记
+- 整个 HTML 代码块作为 replace 的值
+- {{format_message_variable::stat_data}} 是酒馆宏，运行时会被替换
+- 本地测试时可将宏替换为示例数据查看效果
+- 代码中同时存在 <body> 和 </body> 标签
+- 为防止高度无限增长, 代码中的 min-height: * vh 会被自动转换为以浏览器高度为基准
+```
+
+═══════════════════════════════════════════════════════════════
+第九部分：跑团AI 输出示例（参考）
+═══════════════════════════════════════════════════════════════
+
+跑团AI 的完整输出格式：
+```
+白娅看着你递过来的薄荷糖，手指微微颤抖...
+
+<UpdateVariable>
+<Analysis>
+- Time passed: 10 minutes (from 10:47 to 10:57)
+- Dramatic change: No, routine interaction
+- 白娅.好感度: User showed kindness with candy, +5 appropriate.
+- 主角.物品栏: Mints given away, remove from inventory.
+- 世界.当前时间: Advance 10 minutes.
+</Analysis>
+<JSONPatch>
+[
+  { "op": "replace", "path": "/世界/当前时间", "value": "2025年1月1日 10:57" },
+  { "op": "delta", "path": "/白娅/好感度", "value": 5 },
+  { "op": "remove", "path": "/主角/物品栏/薄荷糖" }
+]
+</JSONPatch>
+</UpdateVariable>
+```
+
+JSON Patch 操作说明：
+┌─────────┬────────────────────────────────────────────────────┐
+│ 操作    │ 用途与示例                                          │
+├─────────┼────────────────────────────────────────────────────┤
+│ replace │ 替换已存在的值                                      │
+│         │ {"op":"replace","path":"/白娅/状态","value":"开心"} │
+├─────────┼────────────────────────────────────────────────────┤
+│ delta   │ 数值增减                                            │
+│         │ {"op":"delta","path":"/白娅/好感度","value":5}      │
+├─────────┼────────────────────────────────────────────────────┤
+│ insert  │ 新增字段                                            │
+│         │ {"op":"insert","path":"/物品栏/新物品","value":{...}}│
+├─────────┼────────────────────────────────────────────────────┤
+│ remove  │ 删除字段                                            │
+│         │ {"op":"remove","path":"/物品栏/旧物品"}│
+└─────────┴────────────────────────────────────────────────────┘
+
+路径格式：/一级/二级/三级，如 /白娅/着装/上装
+
+═══════════════════════════════════════════════════════════════
+第十部分：高级功能（可选）
+═══════════════════════════════════════════════════════════════
+
+A) 开局消息内嵌初始化
+在开局消息中使用 <initvar> 块会完全覆盖世界书条目：
+```
+开局剧情内容...
+
+<UpdateVariable>
+<initvar>
+白娅:
+  好感度: 50
+  状态: 兴奋
+</initvar>
+</UpdateVariable>
+```
+
+B) 增量更新方式
+只修改部分变量，其余沿用 [initvar] 条目：
+```
+<UpdateVariable>
+<JSONPatch>
+[
+  { "op": "replace", "path": "/白娅/好感度", "value": 50 }
+]
+</JSONPatch>
+</UpdateVariable>
+```
+
+C) EJS 提示词模板（写在世界书中）
+基本语法：
+```ejs
+<%_ 代码 _%>        <!-- 执行代码，不输出 -->
+<%= 表达式 %>       <!-- 输出表达式结果 -->
+```
+
+条件判断：
+```ejs
+<%_ if (getvar('stat_data.白娅.好感度') < 30) { _%>
+【白娅对你态度冷淡】
+<%_ } else if (getvar('stat_data.白娅.好感度') < 60) { _%>
+【白娅对你态度友好】
+<%_ } else { _%>
+【白娅对你非常亲密】
+<%_ } _%>
+```
+
+引用其他条目：
+```ejs
+<%_ if (getvar('stat_data.白娅.好感度') >= 80) { _%>
+<%- await getwi('高好感度专属剧情') %>
+<%_ } _%>
+```
+
+关键词匹配：
+```ejs
+<%_ if (matchChatMessages(['战斗', '攻击'])) { _%>
+【进入战斗模式】
+<%_ } _%>
+```
+
+预处理模式（在条目开头添加）：
+```ejs
+@@preprocessing
+<%_ if (getvar('stat_data.白娅.好感度') >= 50) { _%>
+高好感度关键词
+<%_ } _%>
+```
+
+格式化输出：
+```ejs
+// JSON 格式
+<%= JSON.stringify(getvar('stat_data')) %>
+
+// YAML 格式
+<%= YAML.stringify(getvar('stat_data'), { blockQuote: 'literal' }) %>
+
+// 随机数
+<%= _.random(0, 10) %>
+
+// 随机选择
+<%= _.sample(['选项A', '选项B', '选项C']) %>
+```
+
+默认值处理：
+```ejs
+// 变量不存在时使用默认值
+getvar('stat_data.白娅.好感度', { defaults: 0 })
+
+// 判断变量是否存在
+<%_ if (getvar('stat_data.白娅.好感度') !== undefined) { _%>
+...
+<%_ } _%>
+```
+
+调试：
+```ejs
+<%_ alert(`当前好感度: ${getvar('stat_data.白娅.好感度')}`); _%>
+<%_ toastr.info('触发了某条件'); _%>
+<%_ debugger; _%>  <!-- 触发浏览器断点 -->
+```
+
+D) 酒馆助手脚本事件
+
+等待初始化（所有 MVU 相关代码前必须添加）：
+```ts
+await waitGlobalInitialized('Mvu');
+```
+
+变量更新结束时：
+```ts
+await waitGlobalInitialized('Mvu');
+eventOn(Mvu.events.VARIABLE_UPDATE_ENDED, (new_vars, old_vars) => {
+  // 限制变动幅度
+  const old_val = _.get(old_vars, 'stat_data.白娅.好感度');
+  _.update(new_vars, 'stat_data.白娅.好感度', v => _.clamp(v, old_val - 5, old_val + 5));
+  
+  // 检测突破
+  const new_val = _.get(new_vars, 'stat_data.白娅.好感度');
+  if (old_val < 50 && new_val >= 50) {
+    toastr.success('好感度突破50！');
+  }
+});
+```
+
+命令解析完成时：
+```ts
+await waitGlobalInitialized('Mvu');
+eventOn(Mvu.events.COMMAND_PARSED, commands => {
+  commands.forEach(command => {
+    // 修复路径中的多余字符
+    command.args[0] = command.args[0].replaceAll('-', '');
   });
-  ```
+});
+```
 
-  #### 其他事件
+其他事件：
+- VARIABLE_INITIALIZED：变量初始化完成（仅新开聊天）
+- VARIABLE_UPDATE_STARTED：更新开始
+- BEFORE_MESSAGE_UPDATE：存储到楼层之前
 
-  - `VARIABLE_INITIALIZED`：变量初始化完成（仅新开聊天）
-  - `VARIABLE_UPDATE_STARTED`：更新开始
-  - `BEFORE_MESSAGE_UPDATE`：存储到楼层之前
+E) 手动操作变量
+```ts
+await waitGlobalInitialized('Mvu');
 
-  ### 8.3 手动操作变量
+// 获取变量
+const vars = Mvu.getMvuData({ type: 'message', message_id: -1 });  // 最后一楼
+const vars = Mvu.getMvuData({ type: 'message', message_id: 5 });   // 第5楼
+const vars = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });  // 当前界面所在楼
 
-  ```ts
-  await waitGlobalInitialized('Mvu');
+// 修改
+_.set(vars, 'stat_data.白娅.好感度', 100);
+_.update(vars, 'stat_data.白娅.好感度', v => v + 10);
 
-  // 获取变量
-  const vars = Mvu.getMvuData({ type: 'message', message_id: -1 });  // 最后一楼
-  const vars = Mvu.getMvuData({ type: 'message', message_id: 5 });   // 第5楼
-  const vars = Mvu.getMvuData({ type: 'message', message_id: getCurrentMessageId() });  // 当前界面所在楼
+// 写回
+await Mvu.replaceMvuData(vars, { type: 'message', message_id: -1 });
+```
 
-  // 修改
-  _.set(vars, 'stat_data.白娅.好感度', 100);
-  _.update(vars, 'stat_data.白娅.好感度', v => v + 10);
+F) 解析文本中的更新命令
+```ts
+await waitGlobalInitialized('Mvu');
 
-  // 写回
-  await Mvu.replaceMvuData(vars, { type: 'message', message_id: -1 });
-  ```
+const old_data = Mvu.getMvuData({ type: 'message', message_id: -1 });
+const content = "<JSONPatch>[...]</JSONPatch>";  // 从某处获取的文本
+const new_data = await Mvu.parseMessage(content, old_data);
+await Mvu.replaceMvuData(new_data, { type: 'message', message_id: -1 });
+```
 
-  ### 8.4 解析文本中的更新命令
-
-  ```ts
-  await waitGlobalInitialized('Mvu');
-
-  const old_data = Mvu.getMvuData({ type: 'message', message_id: -1 });
-  const content = "<JSONPatch>[...]</JSONPatch>";  // 从某处获取的文本
-  const new_data = await Mvu.parseMessage(content, old_data);
-  await Mvu.replaceMvuData(new_data, { type: 'message', message_id: -1 });
-  ```
-
-  ### 8.5 用变量激活绿灯
-
-  ```ts
-  await waitGlobalInitialized('Mvu');
-  eventOn(Mvu.events.VARIABLE_UPDATE_ENDED, variables => {
-    const 好感度 = _.get(variables, 'stat_data.白娅.好感度');
-    let 阶段 = '阶段一';
-    if (好感度 >= 80) 阶段 = '阶段五';
-    else if (好感度 >= 60) 阶段 = '阶段四';
-    else if (好感度 >= 40) 阶段 = '阶段三';
-    else if (好感度 >= 20) 阶段 = '阶段二';
-    injectPrompts([{
-      id: '激活-白娅阶段',
-      content: `白娅${阶段}`,
-      position: 'none',
-      depth: 0,
-      role: 'user',
-      should_scan: true,}]);
-  });
-  ```
-
-  **使用 filter 条件**：
-
-  ```ts
+G) 用变量激活绿灯
+```ts
+await waitGlobalInitialized('Mvu');
+eventOn(Mvu.events.VARIABLE_UPDATE_ENDED, variables => {
+  const 好感度 = _.get(variables, 'stat_data.白娅.好感度');
+  let 阶段 = '阶段一';
+  if (好感度 >= 80) 阶段 = '阶段五';
+  else if (好感度 >= 60) 阶段 = '阶段四';
+  else if (好感度 >= 40) 阶段 = '阶段三';
+  else if (好感度 >= 20) 阶段 = '阶段二';
   injectPrompts([{
-    id: '激活-特殊事件',
-    content: '【特殊事件触发】',
+    id: '激活-白娅阶段',
+    content: `白娅${阶段}`,
     position: 'none',
     depth: 0,
-    role: 'system',
-    filter: () => _.get(getAllVariables(), 'stat_data.白娅.好感度') === 100,
-    should_scan: true,
-  }]);
-  ```
+    role: 'user',
+    should_scan: true,}]);
+});
+```
 
-  ---
+使用 filter 条件：
+```ts
+injectPrompts([{
+  id: '激活-特殊事件',
+  content: '【特殊事件触发】',
+  position: 'none',
+  depth: 0,
+  role: 'system',
+  filter: () => _.get(getAllVariables(), 'stat_data.白娅.好感度') === 100,
+  should_scan: true,
+}]);
+```
 
-  ## 第九部分：状态栏界面
+═══════════════════════════════════════════════════════════════
+第十一部分：故障排除
+═══════════════════════════════════════════════════════════════
 
-  ### 9.1 界面占位符
+A) 变量结构注册失败
+症状：日志查看器未显示「变量结构注册成功」
+排查：
+- 检查脚本语法错误（特别是 zod 写法）
+- 确认 MVU 加载脚本在 Schema 脚本之前
+- 查看日志查看器中的错误信息
+- 尝试开关脚本重试
 
-  MVU 自动在 AI 回复末尾附加 `<StatusPlaceHolderImpl/>`。这个不是AI的行为，而是这个框架会在AI回复结束后 在AI 回复末尾附加 `<StatusPlaceHolderImpl/>`
+B) 变量初始化失败
+症状：变量管理器中看不到变量或显示错误
+排查：
+- 检查 [initvar] 条目的 YAML 格式是否正确
+- 确保 [initvar] 条目处于禁用状态（enabled: false）
+- 确认 YAML 结构与 Schema 定义匹配
+- 新开聊天测试
 
-  ### 9.2 正则配置
+C) 跑团AI不输出更新块
+症状：AI回复末尾没有 <UpdateVariable>
+排查：
+- 检查变量输出格式条目是否启用
+- 确认条目位置在 D0
+- 添加「变量输出格式强调」条目
+- 检查是否有其他提示词冲突
 
-  **1. [不发送]界面占位符**
-  - 查找：`<StatusPlaceHolderImpl/>`
-  - 替换：（空）
-  - 勾选：仅格式提示词
+D) 变量更新不生效
+症状：AI输出了更新块但变量没变化
+排查：
+- 检查 JSON Patch 路径是否与 [initvar] 结构一致
+- 确认路径使用斜杠格式（/白娅/好感度）而非点格式
+- 检查 Schema 中是否有 transform 拦截了更新
+- 查看日志是否有解析错误
 
-  **2. [界面]状态栏**
-  - 查找：`<StatusPlaceHolderImpl/>`
-  - 替换：你的界面内容
-  - 勾选：仅格式显示
+E) 正则不生效
+症状：历史消息中的更新块仍然发送给AI
+排查：
+- 确认 placement 是数组格式 [2] 而非数字 2
+- 检查 promptOnly: true 是否设置
+- 确认正则语法正确
 
-  ### 9.3 纯文本状态栏
+F) 状态栏不显示
+症状：<StatusPlaceHolderImpl/> 没有被替换
+排查：
+- 确认美化正则的 markdownOnly: true
+- 检查 HTML 语法是否正确
+- 确认宏 {{format_message_variable::...}} 路径正确
+- 确保使用 <pre> 标签保留 YAML 缩进
 
-  ```text
-  好感度: {{format_message_variable::stat_data.白娅.好感度}}
-  地点: {{format_message_variable::stat_data.世界.当前地点}}
-  ```
+G) YAML 显示格式错乱
+症状：状态栏中的变量缩进丢失或换行错误
+排查：
+- 必须使用 <pre> 标签包裹宏
+- CSS 必须包含 white-space: pre
+- 不要对 YAML 内容做额外的 HTML 转义
 
-  ### 9.4 HTML 美化
+═══════════════════════════════════════════════════════════════
+第十二部分：完整实现示例
+═══════════════════════════════════════════════════════════════
 
-  ```html
-  <style>
-  .status-bar {
-    font-size: 14px;
-    color: #ff69b4;
-    border: 1px solid #ff69b4;
-    padding: 5px;
-    border-radius: 8px;
+以下是一个完整的 MVU 集成示例，包含所有必需组件：
+
+【脚本1】MVU 加载
+```ts
+import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js';
+```
+
+【脚本2】变量结构
+```ts
+import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';
+
+export const Schema = z.object({
+  白娅: z.object({
+    好感度: z.coerce.number().transform(v => _.clamp(v, 0, 100)),
+    状态: z.string(),
+    着装: z.object({
+      上装: z.string(),
+      下装: z.string(),
+    }),
+  }),
+  世界: z.object({
+    _类型: z.string(),
+    当前时间: z.string(),
+    当前地点: z.string(),
+  }),
+  主角: z.object({
+    物品栏: z.record(
+      z.string().describe('物品名'),
+      z.object({
+        描述: z.string(),
+        数量: z.coerce.number().int().prefault(1),
+      })
+    ).transform(data => _.pickBy(data, ({数量}) => 数量 > 0)),}),
+});
+
+$(() => {
+  registerMvuSchema(Schema);
+});
+```
+
+【世界书条目汇总】
+```json
+{
+  "name": "MVU变量系统",
+  "entries": [
+    {
+      "id": "initvar",
+      "comment": "[initvar]变量初始化勿开",
+      "enabled": false,
+      "keys": ["[initvar]"],
+      "content": "白娅:\n  好感度: 30\n  状态: 正常\n  着装:\n    上装: 校服外套\n    下装: 百褶裙\n世界:\n  _类型: 现代校园\n  当前时间: 2025年1月1日 10:00\n  当前地点: 教室\n主角:\n  物品栏:\n    创可贴:\n      描述: 旧的卡通创可贴\n      数量: 1",
+      "position": "before_char",
+      "order": 100
+    },
+    {
+      "id": "var_list",
+      "comment": "变量列表",
+      "enabled": true,
+      "keys": [],
+      "content": "---\n<status_current_variable>\n{{format_message_variable::stat_data}}\n</status_current_variable>",
+      "position": "at_depth_system",
+      "at_depth": { "depth": 1 },
+      "order": 100
+    },
+    {
+      "id": "update_rules",
+      "comment": "[mvu_update]变量更新规则",
+      "enabled": true,
+      "keys": [],
+      "content": "---\n变量更新规则:\n  白娅:\n    好感度:\n      type: number\n      range: 0~100\n      check:\n        - 根据白娅对用户行为的感知调整 ±(3~6)\n        - 仅在白娅察觉到用户行为时更新\n    着装.${上装|下装}:\n      check:\n        - 换装、衣物损坏时更新\n  世界:\n    当前时间:\n      format: YYYY年MM月DD日 HH:MM\n    当前地点:\n      check: 场景转换时更新\n  主角:\n    物品栏:\n      check:\n        - 获取、消耗、丢弃时更新\n        - 数量归零后自动删除",
+      "position": "at_depth_system",
+      "at_depth": { "depth": 4 },
+      "order": 100
+    },
+    {
+      "id": "output_format",
+      "comment": "[mvu_update]变量输出格式",
+      "enabled": true,
+      "keys": [],
+      "content": "---\n变量输出格式:\n  rule:\n    - 在回复末尾输出更新分析和更新命令\n    - 更新命令使用 JSON Patch 格式\n    - 不要更新以 `_` 开头的只读变量\n  format: |-\n    <UpdateVariable>\n    <Analysis>$(英文，不超过80词)\n    - ${计算经过时间}\n    - ${基于check分析每个变量}\n    </Analysis>\n    <JSONPatch>\n    [\n      { \"op\": \"replace\", \"path\": \"${/路径}\", \"value\": \"${新值}\" },\n      { \"op\": \"delta\", \"path\": \"${/数值路径}\", \"value\": ${变动值} },\n      ...\n    ]\n    </JSONPatch>\n    </UpdateVariable>",
+      "position": "at_depth_system",
+      "at_depth": { "depth": 0 },
+      "order": 100
+    }
+  ]
+}
+```
+
+【正则脚本汇总】
+```json
+[
+  {
+    "id": "mvu_remove_update",
+    "name": "[不发送]去除变量更新",
+    "enabled": true,
+    "placement": [2],
+    "find": {
+      "pattern": "/<UpdateVariable>[\s\S]*?<\/UpdateVariable>/g",
+      "style": "slash"
+    },
+    "replace": "",
+    "promptOnly": true,
+    "markdownOnly": false
+  },
+  {
+    "id": "mvu_remove_placeholder",
+    "name": "[不发送]界面占位符",
+    "enabled": true,
+    "placement": [2],
+    "find": {
+      "pattern": "/<StatusPlaceHolderImpl\/>/g",
+      "style": "slash"
+    },
+    "replace": "",
+    "promptOnly": true,
+    "markdownOnly": false
+  },
+  {
+    "id": "mvu_status_display",
+    "name": "[美化]状态栏显示",
+    "enabled": true,
+    "placement": [2],
+    "find": {
+      "pattern": "/<StatusPlaceHolderImpl\/>/g",
+      "style": "slash"
+    },
+    "replace": " 如示例的html所示",
+    "promptOnly": false,
+    "markdownOnly": true
   }
-  </style>
-  <div class="status-bar">
-  好感度: {{format_message_variable::stat_data.白娅.好感度}}
-  </div>
-  ```
+]
+```
+═══════════════════════════════════════════════════════════════
+第十三部分：快速检查清单
+═══════════════════════════════════════════════════════════════
 
-  ### 9.5 在消息开头显示
+实现 MVU 时，确认以下项目：
 
-  修改正则：
-  - 查找：`/(.*)<StatusPlaceHolderImpl/>/s`
-  - 替换：`你的界面\n$1`
+□ tavern_helper.scripts
+  □ MVU 加载脚本已添加
+  □ Schema 注册脚本已添加
+  □ Schema 结构与 [initvar] YAML 匹配
 
-  ### 9.6 前端界面
+□ worldbook.entries
+  □ [initvar] 条目已创建且 enabled: false
+  □ 变量列表条目已创建（D1）
+  □ 变量更新规则条目已创建（D3-4）
+  □ 变量输出格式条目已创建（D0）
 
-  复杂交互界面需要使用酒馆助手的 iframe 功能，可以：
-  - 显示变量并允许玩家修改
-  - 请求 AI 生成
-  - 制作游戏界面
+□ regex_scripts
+  □ 去除变量更新正则已添加（promptOnly: true, placement: [2]）
+  □ 去除占位符正则已添加（promptOnly: true, placement: [2]）
+  □ 状态栏美化正则已添加（markdownOnly: true, placement: [2]）
+  □ 美化正则使用 <pre> 标签且 CSS 包含 white-space: pre
+  □ 美化正则要导入js-yaml( <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>)
+□ 路径一致性
+  □ Schema 字段名 = YAML 键名 = JSON Patch 路径段 = 宏路径段
 
+□ 测试验证
+  □ 新开聊天后日志显示「变量结构注册成功」
+  □ 变量管理器中可见初始变量
+  □ 跑团AI回复末尾有 <UpdateVariable> 块
+  □ 变量随剧情正确更新
+  □ 状态栏正确显示 YAML 格式（缩进保留）
 
-  ## 第十一部分：故障排除
-
-  ### 11.1 变量结构注册失败
-
-  - 检查脚本语法错误
-  - 查看日志查看器中的错误信息
-  - 开关脚本重试
-
-  ### 11.2 变量初始化失败
-
-  - 检查 initvar 格式是否与 schema 匹配
-  - 确保 initvar 条目处于禁用状态

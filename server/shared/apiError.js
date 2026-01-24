@@ -67,6 +67,8 @@ export class ApiError extends Error {
 
   toJson() {
     const details = this.details || {};
+    const mergedDetails = { ...(details && typeof details === "object" ? details : {}) };
+    if (mergedDetails.httpStatus === undefined) mergedDetails.httpStatus = this.httpStatus;
     const requestId = this.requestId ?? toNonEmptyStringOrNull(details.requestId);
     const runId = this.runId ?? toNonEmptyStringOrNull(details.runId);
     const draftId = this.draftId ?? toNonEmptyStringOrNull(details.draftId);
@@ -79,7 +81,7 @@ export class ApiError extends Error {
       message: String(this.message || ""),
       requestId: requestId ?? undefined,
       runId: runId ?? undefined,
-      details: this.details ?? undefined,
+      details: mergedDetails ?? undefined,
       draftId: draftId ?? undefined,
       baseVersion: baseVersion ?? undefined,
       latestVersion: latestVersion ?? undefined,

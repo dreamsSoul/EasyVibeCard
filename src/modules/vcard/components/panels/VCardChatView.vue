@@ -14,10 +14,17 @@
       <details ref="menuRef" class="vcardChatMenu">
         <summary class="vcardChatMenu__trigger" title="更多">+</summary>
         <div class="vcardChatMenu__panel">
-          <button type="button" class="vcardChatMenu__item" :disabled="sending || pendingBusy || pendingBlocked" @click="onMenuReplan">
+          <button type="button" class="vcardChatMenu__item" :disabled="sending || settingsBusy" @click="onToggleWorkflowModeClick">
+            模式：{{ workflowMode === "free" ? "自由编辑" : "任务" }}
+          </button>
+          <button type="button" class="vcardChatMenu__item" :disabled="sending || settingsBusy" @click="onToggleSoundEnabledClick">
+            提示音：{{ soundEnabled ? "开" : "关" }}
+          </button>
+
+          <button v-if="workflowMode !== 'free'" type="button" class="vcardChatMenu__item" :disabled="sending || pendingBusy || pendingBlocked" @click="onMenuReplan">
             重新规划（保留产物）
           </button>
-          <button type="button" class="vcardChatMenu__item" :disabled="sending || pendingBusy || pendingBlocked" @click="onMenuAdvanceTask">
+          <button v-if="workflowMode !== 'free'" type="button" class="vcardChatMenu__item" :disabled="sending || pendingBusy || pendingBlocked" @click="onMenuAdvanceTask">
             标记当前任务完成
           </button>
           <button type="button" class="vcardChatMenu__item" @click="onToggleShowRead">
@@ -46,7 +53,7 @@
             <div v-else class="chatMsg__content">{{ displayMessageContent(m) }}</div>
           </template>
           <div v-else class="chatMsg__content">{{ displayMessageContent(m) }}</div>
-          <div v-if="isUserFailed(m) && m.localError" class="chatMsg__error" :title="String(m.localError || '')">
+          <div v-if="isUserFailed(m) && m.localError" class="chatMsg__error" :title="String(m.localErrorDetail || m.localError || '')">
             {{ summarizeErrorText(m.localError) }}
           </div>
           <div v-if="idx === lastFailedUserIdx && isUserFailed(m) && canRetryLastAction" class="chatMsg__retryRow">
@@ -55,7 +62,11 @@
         </div>
       </div>
 
-      <VCardStepper :progress="progress" />
+      <VCardStepper v-if="workflowMode !== 'free'" :progress="progress" />
+      <div v-else class="vcardChatModeHint">
+        <div class="vcardChatModeHint__title">自由编辑模式</div>
+        <div class="vcardChatModeHint__text">无需任务清单；直接描述你想修改的内容即可。需要你决定/补充信息时会提示。</div>
+      </div>
 
       <VCardPendingPanel
         v-if="pendingBlocked"
@@ -71,6 +82,10 @@
       <div class="composer vcardComposer">
         <div class="composer__toolbar">
           <div class="composer__toolbarSpacer"></div>
+
+          <button type="button" class="btn" :disabled="sending || settingsBusy" @click="onToggleWorkflowModeClick">
+            模式：{{ workflowMode === "free" ? "自由编辑" : "任务" }}
+          </button>
 
           <button v-if="sending" class="btn btn--danger" :disabled="stopping" title="停止本次发送" @click="$emit('cancelSend')">
             {{ stopping ? "停止中…" : "停止" }}
@@ -116,6 +131,9 @@ const props = defineProps({
   modelValue: { type: String, required: true },
   sending: { type: Boolean, default: false },
   stopping: { type: Boolean, default: false },
+  workflowMode: { type: String, default: "task" },
+  settingsBusy: { type: Boolean, default: false },
+  soundEnabled: { type: Boolean, default: false },
   progress: { type: Object, default: null },
   canRestoreInput: { type: Boolean, default: false },
   restoreInputTitle: { type: String, default: "" },
@@ -131,6 +149,8 @@ const emit = defineEmits([
   "cancelSend",
   "replanKeepArtifacts",
   "manualAdvanceCurrentTask",
+  "toggleWorkflowMode",
+  "toggleSoundEnabled",
   "approvePendingPlan",
   "rejectPendingPlan",
   "acceptPendingPatch",
@@ -174,7 +194,8 @@ const chatListRef = ref(null);
 const pendingKind = computed(() => String(props.pending?.kind || "").trim());
 const pendingBlocked = computed(() => pendingKind.value === "plan_review" || pendingKind.value === "patch_review");
 const placeholderText = computed(() => {
-  if (pendingBlocked.value) return "存在待审批项：请先在上方处理（Approve/Reject/Accept/追问）";
+  if (pendingKind.value === "plan_review") return "存在待审批计划：请先在上方处理（批准/驳回/追问）";
+  if (pendingKind.value === "patch_review") return "存在待应用变更：系统正在自动处理，请稍候…";
   return "输入消息（Ctrl/⌘ + Enter 发送）";
 });
 
@@ -195,6 +216,22 @@ function onMenuReplan() {
 
 function onMenuAdvanceTask() {
   emit("manualAdvanceCurrentTask");
+  closeMenu();
+}
+
+function normalizeWorkflowMode(value) {
+  return String(value || "").trim() === "free" ? "free" : "task";
+}
+
+const workflowMode = computed(() => normalizeWorkflowMode(props.workflowMode));
+
+function onToggleWorkflowModeClick() {
+  emit("toggleWorkflowMode");
+  closeMenu();
+}
+
+function onToggleSoundEnabledClick() {
+  emit("toggleSoundEnabled");
   closeMenu();
 }
 

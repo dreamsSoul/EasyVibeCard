@@ -104,16 +104,8 @@ export function maybeBuildReviewPause({ source, snapshot, kinds, patchOps, assis
     };
   }
 
-  if (!hasArtifactChanged(proposedChangedPaths)) return null;
-  return {
-    pauseReason: "patch_review",
-    pendingReview: buildPendingReview({
-      snapshotBefore: snapshot,
-      snapshotAfter: dry.snapshot,
-      kinds,
-      changedPaths: proposedChangedPaths,
-      patchOps: ops,
-    }),
-    proposedChangedPaths,
-  };
+  // 全自动策略：产物变更（card/worldbook/regex/tavern_helper）不再进入 patch_review，
+  // 直接 apply 并继续推进；仅保留 plan_review 作为“需要用户决策”的暂停点。
+  // 说明：旧版本可能仍存在 patch_review pending；前端会在拉取到 pending 时自动 Accept。
+  return null;
 }

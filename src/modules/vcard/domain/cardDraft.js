@@ -178,13 +178,17 @@ export function normalizeTavernHelperPackLite(raw) {
   const scripts = (Array.isArray(obj.scripts) ? obj.scripts : [])
     .map((s) => {
       const o = toPlainObject(s) || {};
+      const buttonObj = toPlainObject(o.button) || {};
       return {
         id: toStringOrEmpty(o.id),
         name: toStringOrEmpty(o.name),
-        type: toStringOrEmpty(o.type) || "script",
+        // 约束：导出格式（tavern_helper.scripts[i].type）仅支持 script；其他值一律覆盖为 script。
+        type: "script",
         info: toStringOrEmpty(o.info),
         enabled: toBool(o.enabled, true),
         content: toStringOrEmpty(o.content),
+        button: { enabled: toBool(buttonObj.enabled, true), buttons: Array.isArray(buttonObj.buttons) ? buttonObj.buttons : [] },
+        data: toPlainObject(o.data) || {},
       };
     })
     .filter((s) => s.id || s.name || s.content || s.info);

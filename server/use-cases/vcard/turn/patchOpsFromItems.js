@@ -29,7 +29,7 @@ function pushPatchArrayInto(patchOps, rawPatch, allowedRoots) {
         httpStatus: 400,
         code: ERROR_CODES.PATCH_ROOT_FORBIDDEN,
         message: `patch 不允许修改 ${root || "（空）"}（收到：${path || "（空）"}）`,
-        details: { path },
+        details: { errorType: "model_output", stage: "build_patchops", path, root },
       });
     }
     patchOps.push(op);
@@ -52,7 +52,7 @@ function pushWorldbookTargetAsPatch(patchOps, { snapshot, item }) {
       httpStatus: 400,
       code: ERROR_CODES.BAD_REQUEST,
       message: res?.error || "worldbook.target 非法。",
-      details: { stage: "build_patchops", kind: "worldbook.target" },
+      details: { errorType: "model_output", stage: "build_patchops", kind: "worldbook.target" },
     });
   }
   pushPatchArrayInto(patchOps, res.patch, new Set(["worldbook"]));

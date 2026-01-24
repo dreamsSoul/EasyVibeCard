@@ -58,6 +58,54 @@ function genId(prefix) {
   return `${prefix || "id"}_${Date.now()}_${Math.trunc(Math.random() * 100000)}`;
 }
 
+function ensureWorldNameInExtensions(ext, fallbackName) {
+  const obj = isPlainObject(ext) ? ext : {};
+  const fallback = String(fallbackName || "").trim();
+  const world = obj.world;
+
+  if (typeof world === "string") {
+    const name = world.trim() || fallback;
+    obj.world = name;
+    return name;
+  }
+  if (isPlainObject(world)) {
+    const name = String(world.name || "").trim() || fallback;
+    obj.world = { ...world, name };
+    return name;
+  }
+
+  // 缺失/非法类型：强制补齐为字符串（允许为空字符串，保证 key 存在）。
+  obj.world = fallback;
+  return fallback;
+}
+
+function normalizeBoolLike(value, fallback) {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return Boolean(fallback);
+}
+
+function ensureDefaultExtensionsForExport(ext) {
+  const obj = isPlainObject(ext) ? ext : {};
+  if (obj.fav === undefined) obj.fav = false;
+  obj.fav = normalizeBoolLike(obj.fav, false);
+
+  const talk = String(obj.talkativeness ?? "").trim();
+  obj.talkativeness = talk || "0.5";
+
+  const dp = isPlainObject(obj.depth_prompt) ? obj.depth_prompt : {};
+  const depth = Number.isFinite(Number(dp.depth)) ? Math.trunc(Number(dp.depth)) : 4;
+  obj.depth_prompt = {
+    ...dp,
+    prompt: String(dp.prompt ?? ""),
+    depth,
+    role: String(dp.role || "system"),
+  };
+
+  return obj;
+}
+
 function buildFindRegexString(find) {
   const resolved = resolveFindRegex(find);
   const body = String(resolved.pattern || "").replaceAll("/", "\\/");
@@ -80,8 +128,9 @@ function importTavernHelper(value) {
 
 function exportTavernHelperTuple(pack) {
   const p = normalizeTavernHelperPackLite(pack);
+  const scripts = p.scripts.map((s) => ({ ...s, id: String(s.id || genId("th")) }));
   return [
-    ["scripts", p.scripts],
+    ["scripts", scripts],
     ["variables", p.variables],
   ];
 }
@@ -223,11 +272,16 @@ function importWorldbookEntries(list) {
  */
 export function cardDraftToCharaCardV3(draft, opts = {}) {
   const d = normalizeCardDraft(draft);
-  const name = String(d.card.name || "");
   const mode = String(opts?.mode || "work") === "publish" ? "publish" : "work";
 
   const extensions = { ...(isPlainObject(d.raw?.dataExtensions) ? d.raw.dataExtensions : {}) };
   if (mode === "publish") delete extensions.vibePlan;
+
+  // 约束：导出时必须包含 data.extensions.world；若 world 为空/缺失，用 card.name 兜底。
+  // 同时：导出的 data.name 优先与 world 保持一致，避免外部生态读取不到“世界名”。
+  const cardName = String(d.card.name || "").trim();
+  const name = ensureWorldNameInExtensions(extensions, cardName);
+  ensureDefaultExtensionsForExport(extensions);
   const regexScripts = exportRegexScriptsToSt(d.regex_scripts);
   if (regexScripts.length > 0) extensions.regex_scripts = regexScripts;
   if (d.tavern_helper?.scripts?.length || Object.keys(d.tavern_helper?.variables || {}).length) extensions.tavern_helper = exportTavernHelperTuple(d.tavern_helper);
@@ -244,6 +298,9 @@ export function cardDraftToCharaCardV3(draft, opts = {}) {
     post_history_instructions: String(d.card.post_history_instructions || ""),
     alternate_greetings: Array.isArray(d.card.alternate_greetings) ? d.card.alternate_greetings : [],
     tags: Array.isArray(d.card.tags) ? d.card.tags : [],
+    creator: "",
+    character_version: "",
+    group_only_greetings: [],
   };
 
   const wbHasAny = Array.isArray(d.worldbook?.entries) && d.worldbook.entries.length > 0;
@@ -253,7 +310,24 @@ export function cardDraftToCharaCardV3(draft, opts = {}) {
   }
   if (Object.keys(extensions).length > 0) data.extensions = extensions;
 
-  return { spec: "chara_card_v3", spec_version: "3.0", data };
+  const createDate = new Date().toISOString();
+  return {
+    name: data.name,
+    spec: "chara_card_v3",
+    spec_version: "3.0",
+    data,
+    fav: Boolean(extensions.fav),
+    description: data.description,
+    personality: data.personality,
+    scenario: data.scenario,
+    first_mes: data.first_mes,
+    mes_example: data.mes_example,
+    tags: data.tags,
+    create_date: createDate,
+    creatorcomment: "",
+    avatar: "none",
+    talkativeness: String(extensions.talkativeness || "0.5"),
+  };
 }
 
 /**

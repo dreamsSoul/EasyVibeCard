@@ -229,6 +229,34 @@
         <div v-else-if="section === 'vcard'" class="settingsSection">
           <div class="settingsSection__title">VCard 工具</div>
           <div class="hint">这些工具作用于 VCard 草稿与聊天上下文。</div>
+
+          <div class="formRow">
+            <div class="formLabel">工作流模式</div>
+            <div class="formCtrl">
+              <select class="input" :disabled="vcardSettingsBusy" :value="vcardWorkflowMode" @change="onVcardWorkflowModeChange">
+                <option value="task">任务模式（Task）</option>
+                <option value="free">自由编辑（Free）</option>
+              </select>
+              <div class="hint">任务模式：使用任务清单（vibePlan）驱动；自由编辑：无需任务清单，直接按输入修改。</div>
+            </div>
+          </div>
+
+          <div class="formRow">
+            <div class="formLabel">提示音</div>
+            <div class="formCtrl">
+              <label class="chk"><input type="checkbox" :disabled="vcardSettingsBusy" :checked="vcardSoundEnabled" @change="onVcardSoundEnabledChange" /> 在需要你决定/补充信息时提示</label>
+              <div class="hint">提示音可能受浏览器自动播放策略限制；若无声请与页面交互后重新启用。</div>
+            </div>
+          </div>
+
+          <div class="formRow">
+            <div class="formLabel">错误提示</div>
+            <div class="formCtrl">
+              <label class="chk"><input type="checkbox" :disabled="vcardSettingsBusy" :checked="vcardHumanizeErrors" @change="onVcardHumanizeErrorsChange" /> 使用通俗提示（区分“模型服务侧/输出格式侧”）</label>
+              <label class="chk"><input type="checkbox" :disabled="vcardSettingsBusy || !vcardHumanizeErrors" :checked="vcardShowErrorDetails" @change="onVcardShowErrorDetailsChange" /> 显示详情（悬浮查看 code/stage/provider）</label>
+            </div>
+          </div>
+
           <VCardOutputCleanerEditor @saved="onOutputCleanerSaved" />
           <div v-if="!vcardDraft || !vcardApplyItems" class="vcardEditor__empty">（VCard 草稿未就绪）</div>
           <VCardFindReplace v-else :draft="vcardDraft" :applyItems="vcardApplyItems" />
@@ -307,6 +335,14 @@ const section = ref("ai");
 const vcardDraft = computed(() => props.vcardState?.draft?.value || null);
 const vcardApplyItems = computed(() => (typeof props.vcardState?.applyItems === "function" ? props.vcardState.applyItems : null));
 
+const vcardSettingsBusy = computed(() => Boolean(props.vcardState?.vcardSettingsBusy?.value));
+const vcardWorkflowMode = computed(() => String(props.vcardState?.workflowMode?.value || "task"));
+const vcardSoundEnabled = computed(() => Boolean(props.vcardState?.soundEnabled?.value));
+const vcardHumanizeErrors = computed(() => (props.vcardState?.humanizeErrors?.value === undefined ? true : Boolean(props.vcardState.humanizeErrors.value)));
+const vcardShowErrorDetails = computed(() =>
+  props.vcardState?.showErrorDetails?.value === undefined ? true : Boolean(props.vcardState.showErrorDetails.value),
+);
+
 const SECTIONS = Object.freeze([
   { id: "ai", title: "AI 接口", keywords: ["ai", "provider", "model", "openai", "claude", "gemini", "vertex", "temperature", "top_p", "top_k", "max_tokens"] },
   { id: "presets", title: "预设", keywords: ["preset", "预设", "prompts", "prompt_order", "导入", "导出"] },
@@ -352,6 +388,34 @@ function onSelectPresetChange(e) {
 async function onOutputCleanerSaved() {
   if (typeof props.vcardState?.syncChatViewFromSettings === "function") {
     await props.vcardState.syncChatViewFromSettings({ refreshChat: true });
+  }
+}
+
+async function onVcardWorkflowModeChange(e) {
+  const next = String(e?.target?.value || "task");
+  if (typeof props.vcardState?.setWorkflowMode === "function") {
+    await props.vcardState.setWorkflowMode(next);
+  }
+}
+
+async function onVcardSoundEnabledChange(e) {
+  const next = Boolean(e?.target?.checked);
+  if (typeof props.vcardState?.setSoundEnabled === "function") {
+    await props.vcardState.setSoundEnabled(next);
+  }
+}
+
+async function onVcardHumanizeErrorsChange(e) {
+  const next = Boolean(e?.target?.checked);
+  if (typeof props.vcardState?.setHumanizeErrorsEnabled === "function") {
+    await props.vcardState.setHumanizeErrorsEnabled(next);
+  }
+}
+
+async function onVcardShowErrorDetailsChange(e) {
+  const next = Boolean(e?.target?.checked);
+  if (typeof props.vcardState?.setShowErrorDetailsEnabled === "function") {
+    await props.vcardState.setShowErrorDetailsEnabled(next);
   }
 }
 </script>

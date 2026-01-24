@@ -439,8 +439,8 @@ export async function buildVcardTurnMessages({ chatRepo, idempotencyStore, norma
     await appendUserChatTextIfNeeded({ chatRepo, idempotencyStore, normalized, taggedUserText });
   }
   const chat = cleanChatForVcard(await loadRecentChat(chatRepo, normalized.draftId), vcard);
-  const contextText = buildVcardContextText(snapshot, mode);
-  const ctrlText = buildVcardControlText({ snapshot, mode, reason: normalized.reason, intent: normalized.intent });
+  const contextText = buildVcardContextText(snapshot, mode, vcard);
+  const ctrlText = buildVcardControlText({ snapshot, mode, reason: normalized.reason, intent: normalized.intent, userText: normalized.userText, vcard });
 
   const injectedPack = buildPromptPackFromVcardSettings(vcard);
   const appliedPack = injectedPack ? applyPromptPackToCtx(ctx, injectedPack) : null;
@@ -448,8 +448,8 @@ export async function buildVcardTurnMessages({ chatRepo, idempotencyStore, norma
   let forceWorldInfoBeforeMarker = Boolean(appliedPack?.appliedTargets?.includes("worldInfoBefore"));
 
   // 全文注入：直接给模型正文快照（尽量减少“读文件/反复确认”的回合）。
-  // 说明：token 估算为保守值；此处阈值设得更高以覆盖大多数草稿。
-  const fullText = buildVcardAutoFullText(snapshot, { tokenLimit: 200000 });
+  // 说明：当前默认总是注入全文；若后续需要“超长不注入/截断”，再引入 tokenLimit 策略。
+  const fullText = buildVcardAutoFullText(snapshot);
   if (fullText) {
     const fullPack = {
       version: "v1",

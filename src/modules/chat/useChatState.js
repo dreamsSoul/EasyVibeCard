@@ -32,6 +32,7 @@ import {
 import { cloneJson, normalizeText, readApiSensitive, readThreadId, toTimeLabel, writeThreadId } from "./chatStateHelpers";
 import { createChatSendMessage } from "./chatSendMessage";
 import { attachChatWatches } from "./chatWatches";
+import { defaultOutputCleanerConfig } from "../vcard/domain/outputCleaner";
 
 function toPresetNameList(list) {
   const names = (Array.isArray(list) ? list : []).map((p) => ({ name: String(p?.name || "").trim() })).filter((p) => p.name);
@@ -98,6 +99,71 @@ export function useChatState() {
   const booted = ref(false);
 
   const activePreset = computed(() => activePresetRef.value || BUILTIN_DEFAULT_PRESET);
+
+  function isPlainObject(value) {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  }
+
+  function pickPresetRegexScripts(preset) {
+    const p = preset && typeof preset === "object" ? preset : {};
+    const ext = isPlainObject(p.extensions) ? p.extensions : {};
+    return Array.isArray(ext.regex_scripts) ? ext.regex_scripts : [];
+  }
+
+  function buildOutputCleanerRulesFromPreset(preset) {
+    const scripts = pickPresetRegexScripts(preset);
+    const rules = scripts
+      .filter((s) => s && typeof s === "object")
+      .map((s) => {
+        const name = normalizeText(s.scriptName || "");
+        const pattern = String(s.findRegex || "");
+        if (!pattern.trim()) return null;
+        const style = pattern.trim().startsWith("/") ? "slash" : "raw";
+        return {
+          name,
+          enabled: !Boolean(s.disabled),
+          style,
+          pattern,
+          flags: style === "raw" ? "g" : "",
+          replace: String(s.replaceString ?? ""),
+        };
+      })
+      .filter(Boolean);
+    return rules;
+  }
+
+  function stableRuleListKey(rules) {
+    const list = Array.isArray(rules) ? rules : [];
+    const stable = list.map((r) => ({
+      name: normalizeText(r?.name || ""),
+      enabled: r?.enabled === undefined ? true : Boolean(r.enabled),
+      style: String(r?.style || ""),
+      pattern: String(r?.pattern || ""),
+      flags: String(r?.flags || ""),
+      replace: String(r?.replace ?? ""),
+    }));
+    return JSON.stringify(stable);
+  }
+
+  async function syncVcardOutputCleanerFromActivePreset({ settings } = {}) {
+    ui.lastError = "";
+    try {
+      const s = settings && typeof settings === "object" ? settings : await getApiV1Settings();
+      const currentEnabled =
+        s?.vcard?.outputCleaner?.config?.enabled === undefined ? true : Boolean(s?.vcard?.outputCleaner?.config?.enabled);
+
+      const rulesFromPreset = buildOutputCleanerRulesFromPreset(activePreset.value);
+      const fallback = defaultOutputCleanerConfig();
+      const nextRules = rulesFromPreset.length ? rulesFromPreset : (Array.isArray(fallback?.rules) ? fallback.rules : []);
+
+      const currentRules = s?.vcard?.outputCleaner?.config?.rules;
+      if (stableRuleListKey(currentRules) === stableRuleListKey(nextRules)) return;
+
+      await patchApiV1Settings({ vcard: { outputCleaner: { config: { version: "v1", enabled: currentEnabled, rules: nextRules } } } });
+    } catch (err) {
+      ui.lastError = `同步 VCard 清洗规则失败：${String(err?.message || err)}`;
+    }
+  }
 
   function toNumberOrNull(value) {
     const n = Number(value);
@@ -194,6 +260,7 @@ export function useChatState() {
 
     presets.value = toPresetNameList(presetList?.presets || []);
     await refreshActivePreset();
+    await syncVcardOutputCleanerFromActivePreset({ settings });
   }
 
   function buildPresetPatch(preset) {
@@ -366,7 +433,7 @@ export function useChatState() {
     }
   });
 
-  attachChatWatches({ selectedPresetName, ctx, ui, api, booted, patchApiV1Settings, refreshActivePreset, syncThreadMeta });
+  attachChatWatches({ selectedPresetName, ctx, ui, api, booted, patchApiV1Settings, refreshActivePreset, syncThreadMeta, syncVcardOutputCleanerFromActivePreset });
 
   return {
     presets,

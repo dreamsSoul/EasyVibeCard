@@ -1,10 +1,10 @@
 /**
  * 文件：fullText.js
  * 模块：server/entities/vcard/readProtocol
- * 作用：构建“角色卡全文注入”文本（按 read 路径标识每个条目），并提供保守 token 估算与阈值判断
+ * 作用：构建“角色卡全文注入”文本（按 read 路径标识每个条目）
  * 依赖：utils
  * @created 2026-01-21
- * @modified 2026-01-21
+ * @modified 2026-01-24
  */
 
 import { isPlainObject, normalizePathSegment, toStringOrEmpty } from "./utils.js";
@@ -165,7 +165,7 @@ function buildTavernHelperFullText(snapshot, root) {
  * 中文注释：
  * buildVcardFullText(snapshot)
  * 作用：生成“角色卡全文”文本，且每个条目带明确的 read 路径标识
- * 约束：不做 token 截断；是否注入由 buildVcardAutoFullText 决定
+ * 约束：不做 token 截断
  * 参数：
  *  - snapshot: object（CardDraft 快照/可读快照）
  * 返回：string
@@ -178,7 +178,7 @@ export function buildVcardFullText(snapshot) {
   lines.push("【VCARD：全文（自动注入）】");
   lines.push(`root="${escapeInline(root)}"`);
   lines.push("");
-  lines.push("说明：以下为角色卡正文快照（按路径标注）。若本段缺失/被截断，表示正文过大，本轮不会注入完整全文。");
+  lines.push("说明：以下为角色卡正文快照（按路径标注），用于理解现状与定位 read/patch path。请不要在输出中复述/复制本段内容（除非用户明确要求逐字引用/复写）。");
   lines.push("");
 
   lines.push("【card/】");
@@ -197,25 +197,23 @@ export function buildVcardFullText(snapshot) {
   lines.push("");
   lines.push(...buildTavernHelperFullText(snap, root));
 
+  // 闭合标记：用于让模型与用户明确“全文注入”段落范围。
+  lines.push("【/VCARD：全文（自动注入）】");
+
   return lines.join("\n").trim();
 }
 
 /**
  * 中文注释：
  * buildVcardAutoFullText(snapshot, opts)
- * 作用：当“全文估算 token <= tokenLimit”时返回全文文本，否则返回空字符串
- * 约束：token 估算采用保守策略，避免超量注入导致上下文溢出
+ * 作用：返回全文注入文本
+ * 说明：当前版本默认总是注入全文；若后续需要“超长不注入/截断”，再引入 tokenLimit 策略
  * 参数：
  *  - snapshot: object
  *  - opts?: { tokenLimit?: number }
  * 返回：string（为空表示不注入）
  */
 export function buildVcardAutoFullText(snapshot, opts = {}) {
-  const limit = Number(opts?.tokenLimit);
-  const tokenLimit = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : 30000;
-  const text = buildVcardFullText(snapshot);
-  if (!text) return "";
-  const estimated = estimateTokens(text);
-  if (estimated > tokenLimit) return "";
-  return text;
+  void opts;
+  return buildVcardFullText(snapshot);
 }

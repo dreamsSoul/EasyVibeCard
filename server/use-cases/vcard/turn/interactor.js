@@ -254,92 +254,103 @@ async function runTurnCore({
   const debugUpstream = buildDebugUpstream(effective.upstream);
   emitTurnMeta(emit, { normalized: effective, debugUpstream, upstreamStream, mode });
 
-  const built = await buildTurnMessages(chatRepo, idempotencyStore, { normalized: effective, snapshot, mode });
-  const loop = await runReadLoopAndPersistChat({
-    chatRepo,
-    llmGateway,
-    llmStreamGateway,
-    normalized: effective,
-    snapshot,
-    mode,
-    messages: built.messages,
-    turnPrompt: built.turnPrompt,
-    emit,
-  });
-
-  const { kinds, patchOps } = computePatchOpsAndEmit(emit, { normalized: effective, snapshot, loop });
-
-  const review = maybeBuildReviewPause({
-    source,
-    snapshot,
-    kinds,
-    patchOps,
-    assistantWarnings: [],
-  });
-  if (review) {
-    const pendingPayload = review.pendingPlan || review.pendingReview;
-    if (pendingPayload && pendingRepo?.upsertPending) {
-      await pendingRepo.upsertPending({
-        draftId: effective.draftId,
-        kind: review.pauseReason,
-        baseVersion: effective.baseVersion,
-        fpBefore: pendingPayload.fpBefore,
-        payload: pendingPayload,
-      });
-    }
-
-    const runLog = await writeReviewPausedRunLog({
-      runLogRepo,
+  try {
+    const built = await buildTurnMessages(chatRepo, idempotencyStore, { normalized: effective, snapshot, mode });
+    const loop = await runReadLoopAndPersistChat({
+      chatRepo,
+      llmGateway,
+      llmStreamGateway,
       normalized: effective,
+      snapshot,
       mode,
-      debugUpstream,
-      upstreamStream,
-      loop,
-      kinds,
-      proposedChangedPaths: review.proposedChangedPaths,
+      messages: built.messages,
+      turnPrompt: built.turnPrompt,
+      emit,
     });
 
-    const result = {
-      ok: true,
-      requestId: effective.requestId,
-      draftId: effective.draftId,
-      baseVersion: effective.baseVersion,
-      version: effective.baseVersion,
+    const { kinds, patchOps } = computePatchOpsAndEmit(emit, { normalized: effective, snapshot, loop });
+
+    const review = maybeBuildReviewPause({
+      source,
       snapshot,
-      changedPaths: [],
-      paused: true,
-      pauseReason: review.pauseReason,
-      pendingPlan: review.pendingPlan,
-      pendingReview: review.pendingReview,
-      readRounds: loop.readRounds,
-      readContinuation: null,
-      runLog,
-      debug: { upstream: debugUpstream, stage: "paused", providerDebug: loop.providerDebug },
-    };
+      kinds,
+      patchOps,
+      assistantWarnings: [],
+    });
+    if (review) {
+      const pendingPayload = review.pendingPlan || review.pendingReview;
+      if (pendingPayload && pendingRepo?.upsertPending) {
+        await pendingRepo.upsertPending({
+          draftId: effective.draftId,
+          kind: review.pauseReason,
+          baseVersion: effective.baseVersion,
+          fpBefore: pendingPayload.fpBefore,
+          payload: pendingPayload,
+        });
+      }
+
+      const runLog = await writeReviewPausedRunLog({
+        runLogRepo,
+        normalized: effective,
+        mode,
+        debugUpstream,
+        upstreamStream,
+        loop,
+        kinds,
+        proposedChangedPaths: review.proposedChangedPaths,
+      });
+
+      const result = {
+        ok: true,
+        requestId: effective.requestId,
+        draftId: effective.draftId,
+        baseVersion: effective.baseVersion,
+        version: effective.baseVersion,
+        snapshot,
+        changedPaths: [],
+        paused: true,
+        pauseReason: review.pauseReason,
+        pendingPlan: review.pendingPlan,
+        pendingReview: review.pendingReview,
+        readRounds: loop.readRounds,
+        readContinuation: null,
+        runLog,
+        debug: { upstream: debugUpstream, stage: "paused", providerDebug: loop.providerDebug },
+      };
+
+      await writeIdempotencyIfNeeded(idempotencyStore, { draftId: effective.draftId, clientRequestId: effective.clientRequestId, result });
+      return result;
+    }
+
+    const applied = await applyOpsAndPickResult({
+      draftRepo,
+      normalized: effective,
+      mode,
+      patchOps,
+      meta: {
+        source,
+        runId: effective.runId || undefined,
+        turnIndex: effective.turnIndex || undefined,
+        assistantKinds: kinds,
+      },
+      snapshot,
+      emit,
+    });
+
+    const result = await writeSuccessLogAndBuildResult({ runLogRepo, normalized: effective, mode, debugUpstream, upstreamStream, loop, kinds, applied });
 
     await writeIdempotencyIfNeeded(idempotencyStore, { draftId: effective.draftId, clientRequestId: effective.clientRequestId, result });
     return result;
+  } catch (err) {
+    // 给前端错误提示补齐 provider/model，方便区分“上游报错 vs 输出协议不符”。
+    if (err instanceof ApiError) {
+      const d = err.details && typeof err.details === "object" && !Array.isArray(err.details) ? { ...err.details } : {};
+      if (!String(d.provider || "").trim()) d.provider = String(debugUpstream.provider || "").trim() || "openai";
+      if (!String(d.model || "").trim()) d.model = String(effective.model || "").trim();
+      err.details = d;
+    }
+    throw err;
   }
-
-  const applied = await applyOpsAndPickResult({
-    draftRepo,
-    normalized: effective,
-    mode,
-    patchOps,
-    meta: {
-      source,
-      runId: effective.runId || undefined,
-      turnIndex: effective.turnIndex || undefined,
-      assistantKinds: kinds,
-    },
-    snapshot,
-    emit,
-  });
-
-  const result = await writeSuccessLogAndBuildResult({ runLogRepo, normalized: effective, mode, debugUpstream, upstreamStream, loop, kinds, applied });
-
-  await writeIdempotencyIfNeeded(idempotencyStore, { draftId: effective.draftId, clientRequestId: effective.clientRequestId, result });
-  return result;
 }
 
 /**

@@ -346,3 +346,23 @@
   background: rgba(0, 0, 0, 0.04);
   border-radius: 6px;
 }
+
+/* ========== Chat：自由编辑模式提示 ========== */
+.vcardChatModeHint {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px dashed rgba(120, 120, 150, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.vcardChatModeHint__title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.vcardChatModeHint__text {
+  color: var(--text-secondary, #bbb);
+  font-size: 12px;
+  line-height: 1.5;
+}

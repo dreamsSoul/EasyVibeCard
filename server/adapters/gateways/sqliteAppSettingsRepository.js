@@ -144,9 +144,64 @@ function normalizeVcardOutputCleaner(raw) {
   };
 }
 
+function normalizeStringArray(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((x) => String(x ?? "").trim())
+    .filter((x) => x.length > 0);
+}
+
+function normalizeVcardWorkflow(raw) {
+  const obj = isPlainObject(raw) ? raw : {};
+  const modeRaw = normalizeText(obj.mode || "");
+  return { mode: modeRaw === "free" ? "free" : "task" };
+}
+
+function normalizeReviewPolicy(value, fallback) {
+  const t = normalizeText(value);
+  if (t === "auto" || t === "manual") return t;
+  return fallback;
+}
+
+function normalizeVcardReview(raw) {
+  const obj = isPlainObject(raw) ? raw : {};
+  return {
+    patchReview: normalizeReviewPolicy(obj.patchReview, "auto"),
+    planReview: normalizeReviewPolicy(obj.planReview, "manual"),
+  };
+}
+
+const VCARD_SOUND_TRIGGERS_ALLOWED = new Set(["plan_review", "ask_user", "all_done"]);
+const DEFAULT_VCARD_SOUND_TRIGGERS = Object.freeze(["plan_review", "ask_user", "all_done"]);
+
+function normalizeVcardSound(raw) {
+  const obj = isPlainObject(raw) ? raw : {};
+  const enabled = obj.enabled === undefined ? true : Boolean(obj.enabled);
+  const triggers = normalizeStringArray(obj.triggers).filter((t) => VCARD_SOUND_TRIGGERS_ALLOWED.has(t));
+  return { enabled, triggers: triggers.length ? triggers : DEFAULT_VCARD_SOUND_TRIGGERS.slice() };
+}
+
+function normalizeVcardNotifications(raw) {
+  const obj = isPlainObject(raw) ? raw : {};
+  return { sound: normalizeVcardSound(obj.sound) };
+}
+
+function normalizeVcardHumanizeErrors(raw) {
+  const obj = isPlainObject(raw) ? raw : {};
+  return { enabled: obj.enabled === undefined ? true : Boolean(obj.enabled), showDetails: obj.showDetails === undefined ? true : Boolean(obj.showDetails) };
+}
+
+function normalizeVcardErrors(raw) {
+  const obj = isPlainObject(raw) ? raw : {};
+  return { humanize: normalizeVcardHumanizeErrors(obj.humanize) };
+}
+
 function normalizeVcardSettings(raw) {
   const obj = isPlainObject(raw) ? raw : {};
   return {
+    workflow: normalizeVcardWorkflow(obj.workflow),
+    review: normalizeVcardReview(obj.review),
+    notifications: normalizeVcardNotifications(obj.notifications),
+    errors: normalizeVcardErrors(obj.errors),
     promptPack: normalizeVcardPromptPack(obj.promptPack),
     outputCleaner: normalizeVcardOutputCleaner(obj.outputCleaner),
   };
@@ -277,6 +332,16 @@ export function createSqliteAppSettingsRepository(db) {
     const vcardPatched = isPlainObject(patch?.vcard) ? patch.vcard : {};
     const mergedVcard = {
       ...mergeShallow(current.vcard, vcardPatched),
+      workflow: mergeShallow(current.vcard?.workflow, vcardPatched.workflow),
+      review: mergeShallow(current.vcard?.review, vcardPatched.review),
+      notifications: {
+        ...mergeShallow(current.vcard?.notifications, vcardPatched.notifications),
+        sound: mergeShallow(current.vcard?.notifications?.sound, vcardPatched.notifications?.sound),
+      },
+      errors: {
+        ...mergeShallow(current.vcard?.errors, vcardPatched.errors),
+        humanize: mergeShallow(current.vcard?.errors?.humanize, vcardPatched.errors?.humanize),
+      },
       promptPack: mergeShallow(current.vcard?.promptPack, vcardPatched.promptPack),
       outputCleaner: mergeShallow(current.vcard?.outputCleaner, vcardPatched.outputCleaner),
     };

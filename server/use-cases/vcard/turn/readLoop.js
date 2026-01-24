@@ -43,7 +43,12 @@ async function callModelOnce({ llmGateway, llmStreamGateway, upstream, providerO
 function parseItemsOrThrow(assistantText) {
   const parsed = parseVcardModelOutput(assistantText);
   if (parsed.ok) return parsed.items;
-  throw new ApiError({ httpStatus: 400, code: toModelErrorCode(parsed.error), message: parsed.error || "输出不符合协议。", details: { stage: "parse_output" } });
+  throw new ApiError({
+    httpStatus: 400,
+    code: toModelErrorCode(parsed.error),
+    message: parsed.error || "输出不符合协议。",
+    details: { errorType: "model_output", stage: "parse_output" },
+  });
 }
 
 /**
@@ -83,23 +88,50 @@ export async function runReadLoop({
         ? messages
         : [];
 
-  const called = await callModelOnce({
-    llmGateway,
-    llmStreamGateway,
-    upstream,
-    providerOptions,
-    preset,
-    model,
-    messages: roundMessages,
-    stream,
-    emit,
-    draftId,
-    requestId,
-    abortSignal,
-  });
+  let called;
+  try {
+    called = await callModelOnce({
+      llmGateway,
+      llmStreamGateway,
+      upstream,
+      providerOptions,
+      preset,
+      model,
+      messages: roundMessages,
+      stream,
+      emit,
+      draftId,
+      requestId,
+      abortSignal,
+    });
+  } catch (err) {
+    const provider = String(upstream?.provider || "").trim() || "openai";
+    const msg = String(err?.message || err || "上游错误。").trim() || "上游错误。";
+    throw new ApiError({
+      httpStatus: 502,
+      code: ERROR_CODES.UPSTREAM_ERROR,
+      message: msg,
+      details: { errorType: "upstream", stage: "call_upstream", provider, model: String(model || ""), upstreamMessage: msg },
+    });
+  }
   providerDebug = called?.debug || {};
   if (!called?.ok) {
-    throw new ApiError({ httpStatus: 502, code: ERROR_CODES.UPSTREAM_ERROR, message: called?.error || "上游错误。", details: { stage: "call_upstream" } });
+    const provider = String(upstream?.provider || "").trim() || "openai";
+    const upstreamStatus = Number(called?.debug?.status);
+    const msg = String(called?.error || "上游错误。").trim() || "上游错误。";
+    throw new ApiError({
+      httpStatus: 502,
+      code: ERROR_CODES.UPSTREAM_ERROR,
+      message: msg,
+      details: {
+        errorType: "upstream",
+        stage: "call_upstream",
+        provider,
+        model: String(model || ""),
+        upstreamStatus: Number.isFinite(upstreamStatus) ? upstreamStatus : undefined,
+        upstreamMessage: msg,
+      },
+    });
   }
 
   assistantText = String(called.assistantText || "");

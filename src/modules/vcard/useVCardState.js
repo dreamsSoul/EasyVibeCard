@@ -15,6 +15,7 @@ import {
   getApiV1Settings,
   getApiV1VcardPending,
   nowTime,
+  patchApiV1Settings,
   rejectApiV1VcardPendingPatch,
   rejectApiV1VcardPendingPlan,
 } from "../../shared";
@@ -96,6 +97,180 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
 
   const draftApi = useVCardDraftApi();
 
+  // ========== VCard Settings（工作流/提示音/错误展示） ==========
+  const vcardSettingsBusy = ref(false);
+  const workflowMode = ref("task"); // task | free
+  const soundEnabled = ref(false);
+  const soundTriggers = ref(["plan_review", "ask_user", "all_done"]);
+  const humanizeErrors = ref(true);
+  const showErrorDetails = ref(true);
+  const reviewPatchReview = ref("auto"); // auto | manual（当前仅实现 auto）
+  const reviewPlanReview = ref("manual"); // manual | auto（默认 manual）
+
+  function normalizeWorkflowMode(value) {
+    return String(value || "").trim() === "free" ? "free" : "task";
+  }
+
+  function normalizePolicy(value, fallback) {
+    const t = String(value || "").trim();
+    if (t === "auto" || t === "manual") return t;
+    return fallback;
+  }
+
+  function normalizeStringArray(value, fallback) {
+    const list = (Array.isArray(value) ? value : []).map((x) => String(x ?? "").trim()).filter(Boolean);
+    return list.length ? list : Array.isArray(fallback) ? fallback.slice() : [];
+  }
+
+  function applyVcardSettingsFromSettings(settings) {
+    const v = settings?.vcard && typeof settings.vcard === "object" ? settings.vcard : {};
+
+    workflowMode.value = normalizeWorkflowMode(v?.workflow?.mode);
+
+    reviewPatchReview.value = normalizePolicy(v?.review?.patchReview, "auto");
+    reviewPlanReview.value = normalizePolicy(v?.review?.planReview, "manual");
+
+    soundEnabled.value = Boolean(v?.notifications?.sound?.enabled);
+    soundTriggers.value = normalizeStringArray(v?.notifications?.sound?.triggers, ["plan_review", "ask_user", "all_done"]);
+
+    humanizeErrors.value = v?.errors?.humanize?.enabled === undefined ? true : Boolean(v.errors.humanize.enabled);
+    showErrorDetails.value = v?.errors?.humanize?.showDetails === undefined ? true : Boolean(v.errors.humanize.showDetails);
+  }
+
+  async function patchVcardSettings(patch) {
+    vcardSettingsBusy.value = true;
+    try {
+      const out = await patchApiV1Settings({ vcard: patch && typeof patch === "object" ? patch : {} });
+      applyVcardSettingsFromSettings(out);
+    } catch (err) {
+      draftApi.boardError.value = `保存 VCard 设置失败：${String(err?.message || err)}`;
+    } finally {
+      vcardSettingsBusy.value = false;
+    }
+  }
+
+  async function setWorkflowMode(nextMode) {
+    await patchVcardSettings({ workflow: { mode: normalizeWorkflowMode(nextMode) } });
+  }
+
+  async function toggleWorkflowMode() {
+    const next = workflowMode.value === "free" ? "task" : "free";
+    await setWorkflowMode(next);
+  }
+
+  function createBeepPlayer() {
+    let ctx = null;
+    const Ctor = globalThis.AudioContext || globalThis.webkitAudioContext;
+    const ensure = () => {
+      if (!Ctor) return null;
+      if (ctx) return ctx;
+      ctx = new Ctor();
+      return ctx;
+    };
+    const unlock = async () => {
+      const c = ensure();
+      if (!c) return false;
+      if (c.state === "running") return true;
+      try {
+        await c.resume();
+        return c.state === "running";
+      } catch {
+        return false;
+      }
+    };
+    const beep = async () => {
+      const c = ensure();
+      if (!c) return false;
+      // 非用户手势触发时可能 resume 失败；失败则静默忽略。
+      try {
+        if (c.state !== "running") await c.resume();
+      } catch {
+        // ignore
+      }
+      if (c.state !== "running") return false;
+
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.value = 0.0001;
+      o.connect(g);
+      g.connect(c.destination);
+
+      const t0 = c.currentTime;
+      // 简单包络：快速起音/衰减，避免刺耳
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.12, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+      o.start(t0);
+      o.stop(t0 + 0.2);
+      return true;
+    };
+    return { unlock, beep };
+  }
+
+  const beepPlayer = createBeepPlayer();
+  const lastNotifiedKey = ref("");
+  let soundUnlockHandler = null;
+
+  function installSoundUnlockerIfNeeded() {
+    if (!soundEnabled.value) return;
+    if (!beepPlayer?.unlock) return;
+    if (soundUnlockHandler) return;
+
+    soundUnlockHandler = async () => {
+      if (!soundEnabled.value) return;
+      const ok = await beepPlayer.unlock().catch(() => false);
+      if (!ok) return;
+      try {
+        window.removeEventListener("pointerdown", soundUnlockHandler);
+        window.removeEventListener("keydown", soundUnlockHandler);
+      } finally {
+        soundUnlockHandler = null;
+      }
+    };
+
+    window.addEventListener("pointerdown", soundUnlockHandler);
+    window.addEventListener("keydown", soundUnlockHandler);
+  }
+
+  async function setSoundEnabled(nextEnabled) {
+    const next = Boolean(nextEnabled);
+    await patchVcardSettings({ notifications: { sound: { enabled: next } } });
+    if (next) {
+      const ok = await beepPlayer.unlock();
+      if (!ok) draftApi.boardError.value = String(draftApi.boardError.value || "提示音可能被浏览器拦截：请与页面交互后重试启用。");
+    }
+  }
+
+  async function toggleSoundEnabled() {
+    await setSoundEnabled(!soundEnabled.value);
+  }
+
+  watch(
+    () => Boolean(soundEnabled.value),
+    (enabled) => {
+      if (enabled) installSoundUnlockerIfNeeded();
+      else if (soundUnlockHandler) {
+        try {
+          window.removeEventListener("pointerdown", soundUnlockHandler);
+          window.removeEventListener("keydown", soundUnlockHandler);
+        } finally {
+          soundUnlockHandler = null;
+        }
+      }
+    },
+    { immediate: true },
+  );
+
+  async function setHumanizeErrorsEnabled(nextEnabled) {
+    await patchVcardSettings({ errors: { humanize: { enabled: Boolean(nextEnabled) } } });
+  }
+
+  async function setShowErrorDetailsEnabled(nextEnabled) {
+    await patchVcardSettings({ errors: { humanize: { showDetails: Boolean(nextEnabled) } } });
+  }
+
   const pending = ref(null);
   const pendingBusy = ref(false);
   const pendingKind = computed(() => String(pending.value?.kind || "").trim());
@@ -109,15 +284,22 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
     }
 
     pendingBusy.value = true;
+    let nextPending = null;
     try {
       const out = await getApiV1VcardPending(id);
-      pending.value = out?.pending || null;
+      nextPending = out?.pending || null;
+      pending.value = nextPending;
       pushEvent({ scope: "pending", type: "refreshed", data: out?.pending || null, sseId: "" });
     } catch (err) {
       pending.value = null;
       pushEvent({ scope: "pending", type: "error", data: { message: String(err?.message || err || "pending 查询失败") }, sseId: "" });
     } finally {
       pendingBusy.value = false;
+    }
+
+    // 兼容旧版本遗留：patch_review 自动 Accept 并继续（不打断用户）。
+    if (nextPending && String(nextPending.kind) === "patch_review" && reviewPatchReview.value === "auto") {
+      await acceptPendingPatch().catch(() => undefined);
     }
   }
 
@@ -132,6 +314,7 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
     readFocusPaths,
     pushEvent,
     onReviewPaused: refreshPending,
+    errorPrefs: { humanizeErrors, showErrorDetails },
   });
 
   async function replanKeepArtifacts() {
@@ -182,6 +365,7 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
     try {
       const settings = await getApiV1Settings();
       draftApi.setChatView(resolveChatViewFromSettings(settings));
+      applyVcardSettingsFromSettings(settings);
       if (refreshChat) {
         const id = String(draftApi.draftId.value || "").trim();
         if (id) await draftApi.refreshChatFromServer({ id, extraMessages: [] });
@@ -196,6 +380,37 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
     await draftApi.refreshFromBoard();
     await refreshPending();
   });
+
+  const decisionType = computed(() => {
+    // 1) plan_review 永远是最高优先级的“决策点”
+    if (pendingKind.value === "plan_review") return "plan_review";
+
+    const p = draftApi.draft.value?.meta?.progress;
+    const nextType = String(p?.nextAction?.type || "").trim();
+    if (nextType !== "ask_user") return "";
+
+    const stepName = String(p?.stepName || "").trim();
+    if (stepName === "全部完成") return "all_done";
+    return "ask_user";
+  });
+
+  const decisionKey = computed(() => {
+    if (!decisionType.value) return "";
+    if (decisionType.value === "plan_review") return `plan_review@${Number(pending.value?.baseVersion) || 0}`;
+    return `${decisionType.value}@${Number(draftApi.draftVersion.value) || 0}`;
+  });
+
+  watch(
+    () => ({ enabled: soundEnabled.value, key: decisionKey.value, type: decisionType.value, triggers: soundTriggers.value.slice().sort().join(",") }),
+    async (next) => {
+      if (!next.enabled) return;
+      if (!next.type || !next.key) return;
+      if (!soundTriggers.value.includes(next.type)) return;
+      if (String(next.key) === String(lastNotifiedKey.value)) return;
+      lastNotifiedKey.value = String(next.key);
+      await beepPlayer.beep().catch(() => undefined);
+    },
+  );
 
   watch(
     () => String(draftApi.draftId.value || ""),
@@ -400,6 +615,11 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
     boardError: draftApi.boardError,
     lastApply: draftApi.lastApply,
     exportMode: draftApi.exportMode,
+    workflowMode,
+    vcardSettingsBusy,
+    soundEnabled,
+    humanizeErrors,
+    showErrorDetails,
     pending,
     pendingBusy,
 
@@ -439,6 +659,12 @@ export function useVCardState({ activeProvider, activeModel, api, ctx, ui }) {
     manualAdvanceCurrentTask,
     applyItems: draftApi.applyItems,
     syncChatViewFromSettings,
+    toggleWorkflowMode,
+    setWorkflowMode,
+    toggleSoundEnabled,
+    setSoundEnabled,
+    setHumanizeErrorsEnabled,
+    setShowErrorDetailsEnabled,
     undo: draftApi.undo,
     redo: draftApi.redo,
     cancelSend: turnApi.cancelSend,

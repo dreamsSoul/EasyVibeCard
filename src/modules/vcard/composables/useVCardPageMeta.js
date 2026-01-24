@@ -35,14 +35,19 @@ function isTextEditingTarget(target) {
 // 作用：抽离 VCardPage 的派生状态与页面级交互（快捷键、当前任务信息等）
 // 约束：仅做 UI 计算/事件绑定，不直接触发网络请求
 // 参数：
-//  - deps: { draft, userInput, writeBoard, sending, canUndo, canRedo, undo, redo, clearRunLog, clearChat, initBoard }
+//  - deps: { draft, userInput, writeBoard, sending, workflowMode, canUndo, canRedo, undo, redo, clearRunLog, clearChat, initBoard }
 // 返回：页面 computed + handlers
-export function useVCardPageMeta({ draft, userInput, writeBoard, sending, canUndo, canRedo, undo, redo, clearRunLog, clearChat, initBoard }) {
+export function useVCardPageMeta({ draft, userInput, writeBoard, sending, workflowMode, canUndo, canRedo, undo, redo, clearRunLog, clearChat, initBoard }) {
   const stepText = computed(() => pickStepText(draft));
   const updatedAt = computed(() => String(draft.value?.meta?.updatedAt || ""));
   const errorCount = computed(() => (Array.isArray(draft.value?.validation?.errors) ? draft.value.validation.errors.length : 0));
   const warnCount = computed(() => (Array.isArray(draft.value?.validation?.warnings) ? draft.value.validation.warnings.length : 0));
-  const planWorkModeText = computed(() => "Auto");
+  const planWorkModeText = computed(() => {
+    const m = String(workflowMode?.value || workflowMode || "").trim();
+    if (m === "free") return "自由";
+    if (m === "task") return "任务";
+    return "—";
+  });
 
   const vibePlanSnapshot = computed(() => {
     const planRaw = draft.value?.raw?.dataExtensions?.vibePlan;

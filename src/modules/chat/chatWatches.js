@@ -15,16 +15,29 @@ import { writeApiSensitive } from "./chatStateHelpers";
 // 作用：注册 useChatState 所需的 watch（preset 选择、settings debounce、apiKey 持久化）
 // 约束：依赖 booted 防止初始化阶段误触发 patch；settings patch 使用 400ms debounce
 // 参数：
-//  - deps: { selectedPresetName, ctx, ui, api, booted, patchApiV1Settings, refreshActivePreset, syncThreadMeta }
+//  - deps: { selectedPresetName, ctx, ui, api, booted, patchApiV1Settings, refreshActivePreset, syncThreadMeta, syncVcardOutputCleanerFromActivePreset }
 // 返回：void
-export function attachChatWatches({ selectedPresetName, ctx, ui, api, booted, patchApiV1Settings, refreshActivePreset, syncThreadMeta }) {
+export function attachChatWatches({
+  selectedPresetName,
+  ctx,
+  ui,
+  api,
+  booted,
+  patchApiV1Settings,
+  refreshActivePreset,
+  syncThreadMeta,
+  syncVcardOutputCleanerFromActivePreset,
+}) {
   watch(
     () => selectedPresetName.value,
     async (next) => {
       if (!booted.value) return;
       try {
-        await patchApiV1Settings({ selectedPresetName: next });
+        const out = await patchApiV1Settings({ selectedPresetName: next });
         await refreshActivePreset();
+        if (typeof syncVcardOutputCleanerFromActivePreset === "function") {
+          await syncVcardOutputCleanerFromActivePreset({ settings: out });
+        }
         await syncThreadMeta();
       } catch (err) {
         ui.lastError = `保存预设选择失败：${String(err?.message || err)}`;

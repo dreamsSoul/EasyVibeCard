@@ -106,27 +106,32 @@
           </div>
           <!-- 助手 Tab -->
           <div v-show="rightTab === 'chat' && !issuesOpen" class="vcardRightPane">
-	            <VCardChatView
-	              v-model="userInput"
-		              :chat="chat"
-		              :ctx="ctx"
-		              :sending="sending"
-		              :stopping="stopping"
-		              :progress="draft?.meta?.progress || null"
-	              :canRestoreInput="canRestoreInput"
-	              :restoreInputTitle="restoreInputTitle"
-	              :canRetryLastAction="canRetryLastAction"
-	              :retryLastActionTitle="retryLastActionTitle"
-	              :pending="pending"
-	              :pendingBusy="pendingBusy"
-	              @send="sendMessage"
-	              @cancelSend="cancelSend"
-	              @replanKeepArtifacts="replanKeepArtifacts"
+		            <VCardChatView
+		              v-model="userInput"
+			              :chat="chat"
+			              :ctx="ctx"
+			              :sending="sending"
+			              :stopping="stopping"
+                    :workflowMode="workflowMode"
+                    :settingsBusy="vcardSettingsBusy"
+                    :soundEnabled="soundEnabled"
+			              :progress="draft?.meta?.progress || null"
+		              :canRestoreInput="canRestoreInput"
+		              :restoreInputTitle="restoreInputTitle"
+		              :canRetryLastAction="canRetryLastAction"
+		              :retryLastActionTitle="retryLastActionTitle"
+		              :pending="pending"
+		              :pendingBusy="pendingBusy"
+		              @send="sendMessage"
+		              @cancelSend="cancelSend"
+		              @replanKeepArtifacts="replanKeepArtifacts"
                 @manualAdvanceCurrentTask="manualAdvanceCurrentTask"
-	              @approvePendingPlan="approvePendingPlan"
-	              @rejectPendingPlan="rejectPendingPlan"
-	              @acceptPendingPatch="acceptPendingPatch"
-	              @rejectPendingPatch="rejectPendingPatch"
+                @toggleWorkflowMode="toggleWorkflowMode"
+                @toggleSoundEnabled="toggleSoundEnabled"
+		              @approvePendingPlan="approvePendingPlan"
+		              @rejectPendingPlan="rejectPendingPlan"
+		              @acceptPendingPatch="acceptPendingPatch"
+		              @rejectPendingPatch="rejectPendingPatch"
               @askPending="askPending"
               @restoreInput="restoreInput"
               @retryLastAction="retryLastAction"
@@ -202,29 +207,32 @@ const props = defineProps({
   ui: { type: Object, required: true },
 });
 
-	const {
-	  ctx, chat, userInput, sending, stopping, runLog, draft, boardError, lastApply, readFocusPaths, eventLog,
-	  pending, pendingBusy,
-	  canRestoreInput, restoreInputTitle, restoreInput, canRetryLastAction, retryLastActionTitle, retryLastAction,
-	  exportMode, canUndo, canRedo, initBoard, clearChat, clearRunLog, clearEventLog, refreshFromBoard, writeBoard, replanKeepArtifacts,
-	  approvePendingPlan, rejectPendingPlan, acceptPendingPatch, rejectPendingPatch, askPending,
-	  manualAdvanceCurrentTask, applyItems, importCharaCardJson, exportCharaCardJson, setExportMode, undo, redo,
-	  cancelSend, sendMessage,
-	} = props.state;
+		const {
+		  ctx, chat, userInput, sending, stopping, runLog, draft, boardError, lastApply, readFocusPaths, eventLog,
+      workflowMode, vcardSettingsBusy, soundEnabled,
+		  pending, pendingBusy,
+		  canRestoreInput, restoreInputTitle, restoreInput, canRetryLastAction, retryLastActionTitle, retryLastAction,
+		  exportMode, canUndo, canRedo, initBoard, clearChat, clearRunLog, clearEventLog, refreshFromBoard, writeBoard, replanKeepArtifacts,
+		  approvePendingPlan, rejectPendingPlan, acceptPendingPatch, rejectPendingPatch, askPending,
+		  manualAdvanceCurrentTask, applyItems, importCharaCardJson, exportCharaCardJson, setExportMode, undo, redo,
+		  cancelSend, sendMessage,
+      toggleWorkflowMode, toggleSoundEnabled,
+		} = props.state;
 
 const {
   stepText, planWorkModeText, updatedAt, errorCount, warnCount,
   resetWorkspace,
-	} = useVCardPageMeta({
-	  draft,
-	  userInput,
-	  writeBoard,
-	  sending,
-	  canUndo,
-  canRedo,
-  undo,
-  redo,
-  clearRunLog,
+		} = useVCardPageMeta({
+		  draft,
+		  userInput,
+		  writeBoard,
+		  sending,
+      workflowMode,
+		  canUndo,
+	  canRedo,
+	  undo,
+	  redo,
+	  clearRunLog,
   clearChat,
   initBoard,
 });
