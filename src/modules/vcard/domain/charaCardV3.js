@@ -108,7 +108,10 @@ function ensureDefaultExtensionsForExport(ext) {
 
 function buildFindRegexString(find) {
   const resolved = resolveFindRegex(find);
-  const body = String(resolved.pattern || "").replaceAll("/", "\\/");
+  // 避免“双重转义”：用户可能把 slash 风格（/..../g）里的 `\/` 直接作为 raw pattern 存进来；
+  // 导出时我们会把 `/` 转义为 `\/`，因此需要先把已存在的 `\/` 归一化为 `/`。
+  const normalized = String(resolved.pattern || "").replaceAll("\\/", "/");
+  const body = normalized.replaceAll("/", "\\/");
   const flags = String(resolved.flags || "");
   return `/${body}/${flags}`;
 }
